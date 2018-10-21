@@ -22,6 +22,16 @@ namespace CDMi {
 
 class MediaSessionSystem : public IMediaSessionSystem {
 public:
+    enum request {
+        FILTERS      = 0x0001,
+        KEYREADY     = 0x0002,
+        KEYNEEDED    = 0x0004,
+        RENEWAL      = 0x0008,
+        RENEWALREADY = 0x0010,
+        EMMDELIVERY  = 0x0020
+    };
+
+public:
     //static const std::vector<std::string> m_mimeTypes;
 
     MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
@@ -55,8 +65,27 @@ public:
         uint8_t  *f_pbClearContentOpaque );
 
 private:
+    static void OnRenewal(void* appSession);
+    static void OnNeedKey(void* appSession);
+    static void OnDeliveryCompleted(void* deliverySession);
+
+    void OnNeedKey(void* dsmSession, void* content) {
+    void OnRenewal();
+    void OnDelivery();
+
+    std::string CreateRenewalExchange();
+
+private:
     std::string _sessionId;
     IMediaSessionSystemCallback* _callback;
+    void* _applicationSession;
+    uint32_t _requests;
+    void* _applicationSession;
+    void* _inbandSession;
+    void* _deliverySession;
+    std::string _renewelChallenge;
+    std::String _keyNeededChallenge;
+    std::String _filters;
 };
 
 } // namespace CDMi

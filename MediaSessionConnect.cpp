@@ -18,9 +18,13 @@
 
 namespace CDMi {
 
-MediaSessionConnect::MediaSessionConnect(const uint8_t *f_pbInitData, uint32_t f_cbInitData)
+MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId()
     , _callback(nullptr) {
+
+    uint32_t TSID (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+
+    _descramblingSession = nvDsmOpen(TSID);
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
@@ -41,7 +45,19 @@ void MediaSessionConnect::Run(const IMediaKeySessionCallback* callback) {
   _callback = callback;   
 }
 
-void MediaSessionConnect::Update(const uint8_t *m_pbKeyMessageResponse, uint32_t  m_cbKeyMessageResponse) {
+void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
+   if (length >= 2) {
+      request value (static_cast<request>((data[0] | (data[1] << 8)) << 16));
+      switch (value) {
+      case ECMDELIVERY:
+      {
+        nvImsmDecryptEMM(&(data[2]), length - 2);
+        break;
+      }
+      default: /* WTF */
+               break;
+
+   }
 }
 
 CDMi_RESULT MediaSessionConnect::Load() {

@@ -22,6 +22,11 @@ namespace CDMi {
 
 class MediaSessionConnect : public IMediaSessionConnect {
 public:
+    enum request {
+        ECMDELIVERY  = 0x10000
+    };
+
+public:
     //static const std::vector<std::string> m_mimeTypes;
 
     MediaSessionConnect(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
@@ -57,6 +62,7 @@ public:
 private:
     std::string _sessionId;
     IMediaKeySessionCallback* _callback;
+    void* _descramblingSession;
 };
 
 } // namespace CDMi
