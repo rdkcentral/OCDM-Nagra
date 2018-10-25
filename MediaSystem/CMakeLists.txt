@@ -1,4 +1,3 @@
-
 project(DRMNagraSystem)
 
 set(DRM_PLUGIN_NAME "NagraSystem")
@@ -10,8 +9,7 @@ set(DRM_PLUGIN_SOURCES
 
 # add the library
 add_library(${PROJECT_NAME} SHARED ${DRM_PLUGIN_SOURCES})
-#target_compile_definitions(${DRM_PLUGIN_NAME} PRIVATE ${PLAYREADY_FLAGS})
-target_link_libraries(${PROJECT_NAME} -lccl ${WPEFRAMEWORK_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${NAGRA_LIBRARIES} ${WPEFRAMEWORK_LIBRARIES})
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".drm")
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
 
