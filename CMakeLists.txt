@@ -1,37 +1,23 @@
 cmake_minimum_required(VERSION 2.8)
-project(DRMNagra)
+#project(DRMNagra)
 
 set(CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake")
 
-set(DRM_PLUGIN_NAME "NagraConnect")
-
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 
-if(NOT CMAKE_CROSSCOMPILING)
-   set(STAGING_DIR "${CMAKE_INSTALL_PREFIX}")
-else()
-   # TODO: this can be multiple directories
-   set(STAGING_DIR "${CMAKE_FIND_ROOT_PATH}")
+#find_package(Nagra REQUIRED)
+find_package(WPEFramework REQUIRED)
+
+#include_directories( "usr/include/Nagra" )
+
+message("found include dirs ${WPEFRAMEWORK_INCLUDE_DIR}")
+include_directories(${WPEFRAMEWORK_INCLUDE_DIR})
+
+if(NOT NAGRA_FOUND)
+
+add_subdirectory(MediaConnect)
+add_subdirectory(MediaSystem)
+
 endif()
 
-find_package(Nagra REQUIRED)
 
-file(GLOB DRM_PLUGIN_INCLUDES *.h)
-
-set(DRM_PLUGIN_LIBS 
-    ${PLAYREADY_LIBRARIES})
-
-set(DRM_PLUGIN_SOURCES 
-    MediaSessionConnect.cpp 
-    MediaSessionSystem.cpp 
-    MediaSystem.cpp)
-
-# add the library
-add_library(${DRM_PLUGIN_NAME} SHARED ${DRM_PLUGIN_SOURCES})
-target_compile_definitions(${DRM_PLUGIN_NAME} PRIVATE ${PLAYREADY_FLAGS})
-target_include_directories(${DRM_PLUGIN_NAME} PRIVATE ${PLAYREADY_INCLUDE_DIRS})
-target_link_libraries(${DRM_PLUGIN_NAME} ${DRM_PLUGIN_LIBS})
-set_target_properties(${DRM_PLUGIN_NAME} PROPERTIES SUFFIX ".drm")
-set_target_properties(${DRM_PLUGIN_NAME} PROPERTIES PREFIX "")
-
-install(TARGETS ${DRM_PLUGIN_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/WPEFramework/OCDM)

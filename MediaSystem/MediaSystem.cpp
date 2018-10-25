@@ -14,51 +14,10 @@
  * limitations under the License.
  */
 
-#include "cdmi.h"
+#include <interfaces/IDRM.h> 
 #include "MediaSessionSystem.h"
-#include "MediaSessionConnect.h"
 
 namespace CDMi {
-
-class NagraConnect : public IMediaKeys {
-private:
-    NagraConnect (const NagraConnect&) = delete;
-    NagraConnect& operator= (const NagraConnect&) = delete;
-
-public:
-    NagraConnect() {
-    }
-    ~NagraConnect(void) {
-    }
-
-    CDMi_RESULT CreateMediaKeySession(
-        int32_t licenseType,
-        const char *f_pwszInitDataType,
-        const uint8_t *f_pbInitData,
-        uint32_t f_cbInitData, 
-        const uint8_t *f_pbCDMData,
-        uint32_t f_cbCDMData, 
-        IMediaKeySession **f_ppiMediaKeySession) {
-
-        *f_ppiMediaKeySession = new CDMi::MediaSessionConnect(f_pbInitData, f_cbInitData);
- 
-        return CDMi_SUCCESS; 
-    }
-
-    CDMi_RESULT SetServerCertificate(
-        const uint8_t *f_pbServerCertificate,
-        uint32_t f_cbServerCertificate) {
-
-        return CDMi_S_FALSE;
-    }
-
-    CDMi_RESULT DestroyMediaKeySession(IMediaKeySession *f_piMediaKeySession) {
-
-        delete f_piMediaKeySession;
-
-        return CDMi_SUCCESS; 
-    }
-};
 
 class NagraSystem : public IMediaKeys {
 private:
@@ -100,13 +59,11 @@ public:
     }
 };
 
-
-static SystemFactoryType<NagraConnect> g_instanceConnect({"video/x-h264", "audio/mpeg"});
 static SystemFactoryType<NagraSystem> g_instanceSystem({"video/x-h264", "audio/mpeg"});
 
 }  // namespace CDMi
 
 CDMi::ISystemFactory* GetSystemFactory() {
 
-    return (&CDMi::g_instance); 
+    return (&CDMi::g_instanceSystem); 
 }

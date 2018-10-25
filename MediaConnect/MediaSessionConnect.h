@@ -16,11 +16,14 @@
 
 #pragma once
 
-#include "cdmi.h"
+#include <interfaces/IDRM.h> 
+
+#include <Nagra/prm_asm.h>
+#include <Nagra/prm_dsm.h>
 
 namespace CDMi {
 
-class MediaSessionConnect : public IMediaSessionConnect {
+class MediaSessionConnect : public IMediaKeySession {
 public:
     enum request {
         ECMDELIVERY  = 0x10000
@@ -60,9 +63,12 @@ public:
         uint8_t  *f_pbClearContentOpaque );
 
 private:
+    static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONCONNECT_ID:" };
+
     std::string _sessionId;
-    IMediaKeySessionCallback* _callback;
-    void* _descramblingSession;
+    const IMediaKeySessionCallback* _callback;
+    TNvSession _applicationSession;
+    TNvSession _descramblingSession;
 };
 
 } // namespace CDMi

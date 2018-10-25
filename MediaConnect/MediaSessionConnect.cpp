@@ -14,17 +14,34 @@
  * limitations under the License.
  */
 
+#include <core/core.h>
+
 #include "MediaSessionConnect.h"
+#include "../Report.h"
 
 namespace CDMi {
 
 MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
-    : _sessionId()
-    , _callback(nullptr) {
+    : _sessionId(g_NAGRASessionIDPrefix)
+    , _callback(nullptr)
+    , _applicationSession(0)
+    , _descramblingSession(0) {
 
-    uint32_t TSID (data[0] | (data[1] << 8) | (data[2] << 16) | (data[3] << 24));
+    if( length >= 6 ) {
+        WPEFramework::Core::FrameType<0>::Reader reader(WPEFramework::Core::FrameType<0>(const_cast<uint8_t *>(data), length), 0);
 
-    _descramblingSession = nvDsmOpen(TSID);
+       _applicationSession = reader.Number<uint32_t>();
+       uint32_t TSID = reader.Number<uint32_t>();
+       uint16_t Emi = reader.Number<uint16_t>();
+
+        uint32_t result = nvDsmOpen(&_descramblingSession, _applicationSession, TSID, Emi);
+        REPORT_DSM(result, "nvDsmOpen");
+
+        _sessionId += std::to_string(_applicationSession);
+    }
+    else {
+      REPORT("Could not initialize MediaSessionConnect, incorrect initialization data length");
+    }
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
@@ -40,24 +57,25 @@ const char *MediaSessionConnect::GetKeySystem(void) const {
 
 void MediaSessionConnect::Run(const IMediaKeySessionCallback* callback) {
 
-  assert ((callback == nullptr) ^ (_callback == nullptr));
+  ASSERT ((callback == nullptr) ^ (_callback == nullptr));
 
   _callback = callback;   
 }
 
 void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
-   if (length >= 2) {
-      request value (static_cast<request>((data[0] | (data[1] << 8)) << 16));
-      switch (value) {
+  if (length >= 2) {
+    request value (static_cast<request>((data[0] | (data[1] << 8)) << 16));
+    switch (value) {
       case ECMDELIVERY:
       {
-        nvImsmDecryptEMM(&(data[2]), length - 2);
+       // nvImsmDecryptEMM(&(data[2]), length - 2);
         break;
       }
       default: /* WTF */
                break;
 
-   }
+    }
+  }
 }
 
 CDMi_RESULT MediaSessionConnect::Load() {
@@ -87,7 +105,7 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
     const uint8_t* /* keyId */)
 {
   // System sessions should *NOT* be used for decrypting !!!!
-  assert(false);
+  ASSERT(false);
 
   return CDMi_S_FALSE;
 }
@@ -95,7 +113,7 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
 CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, const uint32_t, uint8_t*) {
 
   // System sessions should *NOT* be used for decrypting !!!!
-  assert(false);
+  ASSERT(false);
 
   return CDMi_S_FALSE;
 }

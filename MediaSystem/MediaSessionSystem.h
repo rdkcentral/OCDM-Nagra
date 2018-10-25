@@ -16,19 +16,27 @@
 
 #pragma once
 
-#include "cdmi.h"
+#include <interfaces/IDRM.h> 
+
+#include <Nagra/prm_asm.h>
+#include <Nagra/nv_imsm.h>
+
+#include <vector>
 
 namespace CDMi {
 
-class MediaSessionSystem : public IMediaSessionSystem {
-public:
-    enum request {
+class MediaSessionSystem : public IMediaKeySession {
+private:
+    using requestsSize = uint32_t; // do not just increase the size, part of the interface specification!
+
+    enum class Request : requestsSize {
         FILTERS      = 0x0001,
         KEYREADY     = 0x0002,
         KEYNEEDED    = 0x0004,
         RENEWAL      = 0x0008,
-        RENEWALREADY = 0x0010,
-        EMMDELIVERY  = 0x0020
+        EMMDELIVERY  = 0x0010,
+        PROVISION    = 0x0020,
+        ECMDELIVERY  = 0x0040,
     };
 
 public:
@@ -65,27 +73,45 @@ public:
         uint8_t  *f_pbClearContentOpaque );
 
 private:
-    static void OnRenewal(void* appSession);
-    static void OnNeedKey(void* appSession);
-    static void OnDeliveryCompleted(void* deliverySession);
+    using FilterStorage = std::vector<TNvFilter>;
 
-    void OnNeedKey(void* dsmSession, void* content) {
+    static bool OnRenewal(TNvSession appSession);
+    static bool OnNeedKey(TNvSession appSession, TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype);
+    static bool OnDeliveryCompleted(TNvSession deliverySession);
+
+    void OnNeedKey(TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype);
     void OnRenewal();
-    void OnDelivery();
+    void OnDeliveryCompleted();
+    FilterStorage GetFilters();
+    std::string GetProvisionChallenge();
+
+    void CloseDeliverySession();
+    void CloseProvisioningSession();
+
+    void RequestReceived(Request request) {
+        _requests = static_cast<Request>(static_cast<requestsSize>(_requests) | static_cast<requestsSize>(request));
+    }
+
+    void RequestHandled(Request request) {
+        _requests = static_cast<Request>(static_cast<requestsSize>(_requests) & (~static_cast<requestsSize>(request)));
+    }
+
+    bool WasRequestReceived(Request request) const {
+        return static_cast<Request>(static_cast<requestsSize>(_requests) & static_cast<requestsSize>(request)) == request;
+    }
 
     std::string CreateRenewalExchange();
 
-private:
+    static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONSYSTEM_ID:" };
+
     std::string _sessionId;
-    IMediaSessionSystemCallback* _callback;
-    void* _applicationSession;
-    uint32_t _requests;
-    void* _applicationSession;
-    void* _inbandSession;
-    void* _deliverySession;
-    std::string _renewelChallenge;
-    std::String _keyNeededChallenge;
-    std::String _filters;
+    IMediaKeySessionCallback* _callback;
+    Request _requests;
+    TNvSession _applicationSession;
+    TNvSession  _inbandSession;
+    TNvSession _deliverySession;
+    TNvSession  _provioningSession;
+
 };
 
 } // namespace CDMi
