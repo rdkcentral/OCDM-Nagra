@@ -1,9 +1,9 @@
-# - Try to find PlayReady
+# - Try to find Nagra
 # Once done this will define
-#  NAGRA_FOUND - System has PlayReady
-#  NAGRA_INCLUDE_DIRS - The PlayReady include directories
-#  NAGRA_LIBRARIES - The libraries needed to use PlayReady
-#  NAGRA_FLAGS - The flags needed to use PlayReady
+#  NAGRA_FOUND - System has Nagra
+#  NAGRA_INCLUDE_DIRS - The Nagra include directories
+#  NAGRA_LIBRARIES - The libraries needed to use Nagra
+#  NAGRA_FLAGS - The flags needed to use Nagra
 #
 
 find_package(PkgConfig)
