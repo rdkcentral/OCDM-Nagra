@@ -6,8 +6,14 @@
 #  NAGRA_FLAGS - The flags needed to use Nagra
 #
 
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    set(NAGRA_LIB_NAME libnagra_cma_dbg)
+else()
+    set(NAGRA_LIB_NAME libnagra_cma_rel)
+endif()
+
 find_package(PkgConfig)
-pkg_check_modules(PC_NAGRA nagra)
+pkg_check_modules(PC_NAGRA ${NAGRA_LIB_NAME})
 
 if(PC_NAGRA_FOUND)
     if(NAGRA_FIND_VERSION AND PC_NAGRA_VERSION)
