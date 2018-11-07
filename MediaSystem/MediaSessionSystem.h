@@ -18,8 +18,8 @@
 
 #include <interfaces/IDRM.h> 
 
-#include <Nagra/prm_asm.h>
-#include <Nagra/nv_imsm.h>
+#include <nagra/prm_asm.h>
+#include <nagra/nv_imsm.h>
 
 #include <vector>
 
