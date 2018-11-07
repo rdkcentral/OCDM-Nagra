@@ -14,10 +14,36 @@
  * limitations under the License.
  */
 
+#include "../Report.h"
 #include <interfaces/IDRM.h> 
 #include "MediaSessionSystem.h"
 
 namespace CDMi {
+
+namespace {
+
+    class CCLInitialize {
+        CCLInitialize(const CCLInitialize&) = delete;
+        CCLInitialize& operator= (const CCLInitialize&) = delete;
+
+    public:
+        CCLInitialize() {
+            bool result = nvInitialize();
+            if ( result == false ) {
+                REPORT("Call to nvInitialize failed");
+            }
+        }
+
+        ~CCLInitialize() {
+            nvTerminate();
+        }
+
+    };
+
+    static CCLInitialize g_CCLInit;
+
+}
+
 
 class NagraSystem : public IMediaKeys {
 private:

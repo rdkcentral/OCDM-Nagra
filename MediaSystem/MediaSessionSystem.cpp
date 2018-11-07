@@ -20,10 +20,11 @@
 
 #include <core/core.h>
 
-#include <map>
 #include <memory>
+#include <map>
 
 #include <Nagra/nv_dpsc.h>
+#include <Nagra/prm_dsm.h>
 
 namespace CDMi {
 
@@ -79,12 +80,25 @@ void MediaSessionSystem::OnRenewal() {
 
 void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype) {
 
-   if (_callback != nullptr) {
-       _callback->OnKeyStatusUpdate("KEYNEEDED", nullptr, 0);
-   }
-   else {
-       RequestReceived(Request::KEYNEEDED);
-   }
+    if( descramblingSession == 0 ) {
+        if (_callback != nullptr) {
+            _callback->OnKeyStatusUpdate("KEYNEEDED", nullptr, 0);
+        }
+        else {
+            RequestReceived(Request::KEYNEEDED);
+        }
+    }
+    else {
+        IMediaSessionConnect* connectsession = nullptr;
+
+        uint32_t result = nvDsmGetContext(descramblingSession, reinterpret_cast<TNvHandle*>(&connectsession));
+        REPORT_DSM(result, "nvDsmGetContext");
+
+        auto it = _connectsessions.find(connectsession); //note: do not use the pointer retrieved above direclty, by using the one from the list and this code being in the lpock we know the session still exists
+        if( it != _connectsessions.end() ) {
+            (*it)->OnNeedKey();
+        }
+    }
 
 }
 
@@ -235,7 +249,8 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_c
     , _applicationSession(0)
     , _inbandSession(0) 
     , _deliverySession(0)
-    , _provioningSession(0) {
+    , _provioningSession(0)
+    , _connectsessions() {
 
     OperatorVault vault("test.txt");
     string vaultcontent = vault.LoadOperatorVault();
@@ -249,6 +264,9 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_c
         RequestReceived(Request::PROVISION);
     }
     REPORT_ASM(result, "nvAsmOpen");
+
+    result = nvAsmSetContext(_applicationSession, static_cast<TNvHandle>(static_cast<IMediaSessionSystem*>(this)));
+    REPORT_ASM(result, "nvAsmSetContext");
 
     g_lock.Lock();
     g_ApplicationSessionMap[_applicationSession] = this;
@@ -426,5 +444,27 @@ CDMi_RESULT MediaSessionSystem::ReleaseClearContent(const uint8_t*, uint32_t, co
 
   return CDMi_S_FALSE;
 }
+
+void MediaSessionSystem::RegisterConnectSession(IMediaSessionConnect* session) {
+
+    g_lock.Lock(); // note: use same lock as registered callbacks!
+
+    _connectsessions.insert(session);
+
+    g_lock.Unlock();
+}
+
+void MediaSessionSystem::UnregisterConnectSession(IMediaSessionConnect* session) {
+
+    g_lock.Lock(); // note: use same lock as registered callbacks!
+
+    auto it = _connectsessions.find(session);
+    ASSERT( it != _connectsessions.end() );
+    _connectsessions.erase(it);
+
+    g_lock.Unlock();
+
+}
+
 
 }  // namespace CDMi

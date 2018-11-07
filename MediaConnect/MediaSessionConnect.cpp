@@ -19,13 +19,17 @@
 #include "MediaSessionConnect.h"
 #include "../Report.h"
 
+#include <Nagra/prm_asm.h>
+
+
 namespace CDMi {
 
 MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _applicationSession(0)
-    , _descramblingSession(0) {
+    , _descramblingSession(0)
+    , _systemsession(nullptr) {
 
     if( length >= 6 ) {
         WPEFramework::Core::FrameType<0>::Reader reader(WPEFramework::Core::FrameType<0>(const_cast<uint8_t *>(data), length), 0);
@@ -34,10 +38,25 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
        uint32_t TSID = reader.Number<uint32_t>();
        uint16_t Emi = reader.Number<uint16_t>();
 
-        uint32_t result = nvDsmOpen(&_descramblingSession, _applicationSession, TSID, Emi);
-        REPORT_DSM(result, "nvDsmOpen");
+       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&_systemsession));
+       REPORT_ASM(result, "nvAsmGetContext");
+       ASSERT( _systemsession != nullptr );
 
-        _sessionId += std::to_string(_applicationSession);
+      result = nvDsmOpen(&_descramblingSession, _applicationSession, TSID, Emi);
+      REPORT_DSM(result, "nvDsmOpen");
+
+      _sessionId += std::to_string(_descramblingSession);
+
+      if( result == NV_DSM_SUCCESS ) {
+          result = nvDsmSetContext(_descramblingSession, static_cast<TNvHandle>(static_cast<IMediaSessionConnect*>(this)));
+          REPORT_DSM(result, "nvDsmSetContext");
+
+          // note: only do this after initialization is completed  (we could in theory miss the first keyneeded)
+          if( result == NV_DSM_SUCCESS ) {
+              _systemsession->RegisterConnectSession(this);
+          }
+      }
+
     }
     else {
       REPORT("Could not initialize MediaSessionConnect, incorrect initialization data length");
@@ -45,6 +64,12 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
+      // note: do this before descrambling handle is closed
+      if( _systemsession != nullptr) {
+          _systemsession->UnregisterConnectSession(this);
+      }
+
+      nvDsmClose(_descramblingSession);
 }
 
 const char *MediaSessionConnect::GetSessionId() const {
@@ -117,5 +142,10 @@ CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, c
 
   return CDMi_S_FALSE;
 }
+
+void MediaSessionConnect::OnNeedKey() {
+
+}
+
 
 }  // namespace CDMi

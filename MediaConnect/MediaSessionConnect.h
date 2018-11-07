@@ -21,9 +21,12 @@
 #include <Nagra/prm_asm.h>
 #include <Nagra/prm_dsm.h>
 
+#include "../IMediaSessionSystem.h"
+#include "../IMediaSessionConnect.h"
+
 namespace CDMi {
 
-class MediaSessionConnect : public IMediaKeySession {
+class MediaSessionConnect : public IMediaKeySession, public IMediaSessionConnect {
 public:
     enum request {
         ECMDELIVERY  = 0x10000
@@ -62,6 +65,9 @@ public:
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
 
+      // IMediaSessionConnect overrides
+       void OnNeedKey() override;
+
 private:
     static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONCONNECT_ID:" };
 
@@ -69,6 +75,7 @@ private:
     const IMediaKeySessionCallback* _callback;
     TNvSession _applicationSession;
     TNvSession _descramblingSession;
+    IMediaSessionSystem* _systemsession;
 };
 
 } // namespace CDMi

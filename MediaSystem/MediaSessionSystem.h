@@ -22,10 +22,14 @@
 #include <Nagra/nv_imsm.h>
 
 #include <vector>
+#include <set>
+
+#include "../IMediaSessionSystem.h"
+#include "../IMediaSessionConnect.h"
 
 namespace CDMi {
 
-class MediaSessionSystem : public IMediaKeySession {
+class MediaSessionSystem : public IMediaKeySession, public IMediaSessionSystem {
 private:
     using requestsSize = uint32_t; // do not just increase the size, part of the interface specification!
 
@@ -72,8 +76,13 @@ public:
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
 
+    // IMediaSessionSystem overrides
+    void RegisterConnectSession(IMediaSessionConnect* session) override;
+    void UnregisterConnectSession(IMediaSessionConnect* session) override;
+
 private:
     using FilterStorage = std::vector<TNvFilter>;
+    using ConnectSessionStorage = std::set<IMediaSessionConnect*>;
 
     static bool OnRenewal(TNvSession appSession);
     static bool OnNeedKey(TNvSession appSession, TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype);
@@ -111,6 +120,7 @@ private:
     TNvSession  _inbandSession;
     TNvSession _deliverySession;
     TNvSession  _provioningSession;
+    ConnectSessionStorage _connectsessions;
 
 };
 
