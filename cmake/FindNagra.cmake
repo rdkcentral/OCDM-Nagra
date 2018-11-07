@@ -13,7 +13,7 @@ else()
 endif()
 
 find_package(PkgConfig)
-pkg_check_modules(PC_NAGRA ${NAGRA_LIB_NAME})
+pkg_check_modules(PC_NAGRA REQUIRED ${NAGRA_LIB_NAME})
 
 if(PC_NAGRA_FOUND)
     if(NAGRA_FIND_VERSION AND PC_NAGRA_VERSION)
