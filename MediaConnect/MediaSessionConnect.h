@@ -21,7 +21,6 @@
 #include <Nagra/prm_asm.h>
 #include <Nagra/prm_dsm.h>
 
-#include "../IMediaSessionSystem.h"
 #include "../IMediaSessionConnect.h"
 
 namespace CDMi {
@@ -75,7 +74,6 @@ private:
     const IMediaKeySessionCallback* _callback;
     TNvSession _applicationSession;
     TNvSession _descramblingSession;
-    IMediaSessionSystem* _systemsession;
 };
 
 } // namespace CDMi

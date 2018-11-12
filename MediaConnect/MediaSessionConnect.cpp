@@ -17,6 +17,8 @@
 #include <core/core.h>
 
 #include "MediaSessionConnect.h"
+
+#include "../IMediaSessionSystem.h"
 #include "../Report.h"
 
 #include <Nagra/prm_asm.h>
@@ -28,8 +30,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _applicationSession(0)
-    , _descramblingSession(0)
-    , _systemsession(nullptr) {
+    , _descramblingSession(0) {
 
     if( length >= 6 ) {
         WPEFramework::Core::FrameType<0>::Reader reader(WPEFramework::Core::FrameType<0>(const_cast<uint8_t *>(data), length), 0);
@@ -38,9 +39,10 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
        uint32_t TSID = reader.Number<uint32_t>();
        uint16_t Emi = reader.Number<uint16_t>();
 
-       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&_systemsession));
+       IMediaSessionSystem* systemsession;
+       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&systemsession));
        REPORT_ASM(result, "nvAsmGetContext");
-       ASSERT( _systemsession != nullptr );
+       ASSERT( systemsession != nullptr );
 
       result = nvDsmOpen(&_descramblingSession, _applicationSession, TSID, Emi);
       REPORT_DSM(result, "nvDsmOpen");
@@ -53,7 +55,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 
           // note: only do this after initialization is completed  (we could in theory miss the first keyneeded)
           if( result == NV_DSM_SUCCESS ) {
-              _systemsession->RegisterConnectSession(this);
+              systemsession->RegisterConnectSession(this);
           }
       }
 
@@ -64,9 +66,16 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
+
+      //not caching the systemsession pointer is more safe in case the system session might accidently be closed
+      IMediaSessionSystem* systemsession;
+       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&systemsession));
+       REPORT_ASM(result, "nvAsmGetContext");
+       ASSERT( systemsession != nullptr );
+ 
       // note: do this before descrambling handle is closed
-      if( _systemsession != nullptr) {
-          _systemsession->UnregisterConnectSession(this);
+      if( systemsession != nullptr) {
+          systemsession->UnregisterConnectSession(this);
       }
 
       nvDsmClose(_descramblingSession);
