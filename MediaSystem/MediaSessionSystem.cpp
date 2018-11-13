@@ -28,6 +28,10 @@
 
 namespace CDMi {
 
+namespace {
+    static MediaSessionSystem* g_instance = nullptr;
+}
+
 WPEFramework::Core::CriticalSection g_lock;
 
 using ApplicationSessionLookupMap = std::map<TNvSession, MediaSessionSystem*>;
@@ -35,6 +39,48 @@ ApplicationSessionLookupMap g_ApplicationSessionMap;
 
 using DeliverySessionLookupMap = std::map<TNvSession, MediaSessionSystem*>;
 DeliverySessionLookupMap g_DeliverySessionMap;
+
+/* static */ IMediaSessionSystem* IMediaSessionSystem::SystemSession() {
+    g_lock.Lock();
+
+    IMediaSessionSystem* retval = g_instance;
+    if( retval != nullptr ) {
+        retval->Addref();
+    } 
+
+    g_lock.Unlock();
+
+    return retval;
+}
+
+
+/* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData) {
+
+    // create outside lock to not keep the locm during all the API calls
+    MediaSessionSystem* newsesssion = new MediaSessionSystem(f_pbInitData, f_cbInitData);
+
+    g_lock.Lock();
+
+    g_instance = newsesssion;
+
+    g_lock.Unlock();
+
+    return newsesssion;
+}
+
+/* static */ void MediaSessionSystem::DestroyMediaSessionSystem(IMediaKeySession* systemsession) {
+
+    g_lock.Lock();
+
+    if( static_cast<IMediaKeySession*>(g_instance) == systemsession ) {
+        g_instance = nullptr;
+    }
+
+    g_lock.Unlock();
+
+    static_cast<MediaSessionSystem*>(systemsession)->Release();
+
+}
 
 /* static */ bool MediaSessionSystem::OnRenewal(TNvSession appSession) {
 
@@ -250,7 +296,8 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_c
     , _inbandSession(0) 
     , _deliverySession(0)
     , _provioningSession(0)
-    , _connectsessions() {
+    , _connectsessions()
+    , _referenceCount(1) {
 
     OperatorVault vault("test.txt");
     string vaultcontent = vault.LoadOperatorVault();
@@ -464,6 +511,23 @@ void MediaSessionSystem::UnregisterConnectSession(IMediaSessionConnect* session)
 
     g_lock.Unlock();
 
+}
+
+ TNvSession MediaSessionSystem::ApplicationSession() const {
+     return _applicationSession;
+ }
+
+void MediaSessionSystem::Addref() const {
+     WPEFramework::Core::InterlockedIncrement(_referenceCount);
+}
+
+uint32_t MediaSessionSystem::Release() const {
+    if (WPEFramework::Core::InterlockedDecrement(_referenceCount) == 0) {
+        delete this;
+
+        return (WPEFramework::Core::ERROR_DESTRUCTION_SUCCEEDED);
+    }
+    return (WPEFramework::Core::ERROR_NONE);
 }
 
 

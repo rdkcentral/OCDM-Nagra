@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <Nagra/prm_asm.h>
 
 namespace CDMi {
 
@@ -23,8 +24,15 @@ struct IMediaSessionConnect;
 
 struct IMediaSessionSystem {
 
+    static IMediaSessionSystem* SystemSession();
+
     virtual void RegisterConnectSession(IMediaSessionConnect* session) = 0;
     virtual void UnregisterConnectSession(IMediaSessionConnect* session) = 0;
+
+    virtual TNvSession ApplicationSession() const = 0;
+
+    virtual void Addref() const = 0;
+    virtual uint32_t Release() const = 0;
 
 };
   

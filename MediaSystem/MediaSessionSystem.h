@@ -43,11 +43,14 @@ private:
         ECMDELIVERY  = 0x0040,
     };
 
+    MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
+    ~MediaSessionSystem();
+
 public:
     //static const std::vector<std::string> m_mimeTypes;
 
-    MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
-    ~MediaSessionSystem();
+    static IMediaKeySession* CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
+    static void DestroyMediaSessionSystem(IMediaKeySession* session);
 
     // IMediaSessionSystem overrides
     virtual void Run(const IMediaKeySessionCallback *callback) override;
@@ -79,6 +82,12 @@ public:
     // IMediaSessionSystem overrides
     void RegisterConnectSession(IMediaSessionConnect* session) override;
     void UnregisterConnectSession(IMediaSessionConnect* session) override;
+
+    virtual TNvSession ApplicationSession() const override;
+
+    virtual void Addref() const override;
+    virtual uint32_t Release() const override;
+
 
 private:
     using FilterStorage = std::vector<TNvFilter>;
@@ -121,7 +130,8 @@ private:
     TNvSession _deliverySession;
     TNvSession  _provioningSession;
     ConnectSessionStorage _connectsessions;
-
+    mutable uint32_t _referenceCount;
+    
 };
 
 } // namespace CDMi

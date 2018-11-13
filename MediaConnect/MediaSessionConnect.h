@@ -22,6 +22,7 @@
 #include <Nagra/prm_dsm.h>
 
 #include "../IMediaSessionConnect.h"
+#include "../IMediaSessionSystem.h"
 
 namespace CDMi {
 
@@ -71,9 +72,10 @@ private:
     static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONCONNECT_ID:" };
 
     std::string _sessionId;
-    const IMediaKeySessionCallback* _callback;
-    TNvSession _applicationSession;
+    IMediaKeySessionCallback* _callback;
     TNvSession _descramblingSession;
+    IMediaSessionSystem* _systemsession;
+
 };
 
 } // namespace CDMi

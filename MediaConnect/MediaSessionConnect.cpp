@@ -29,33 +29,33 @@ namespace CDMi {
 MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
-    , _applicationSession(0)
-    , _descramblingSession(0) {
+    , _descramblingSession(0)
+    , _systemsession(nullptr) {
 
     if( length >= 6 ) {
         WPEFramework::Core::FrameType<0>::Reader reader(WPEFramework::Core::FrameType<0>(const_cast<uint8_t *>(data), length), 0);
 
-       _applicationSession = reader.Number<uint32_t>();
        uint32_t TSID = reader.Number<uint32_t>();
        uint16_t Emi = reader.Number<uint16_t>();
 
-       IMediaSessionSystem* systemsession;
-       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&systemsession));
-       REPORT_ASM(result, "nvAsmGetContext");
-       ASSERT( systemsession != nullptr );
+       _systemsession = IMediaSessionSystem::SystemSession();
+       ASSERT( _systemsession != nullptr );
 
-      result = nvDsmOpen(&_descramblingSession, _applicationSession, TSID, Emi);
-      REPORT_DSM(result, "nvDsmOpen");
+       if( _systemsession != nullptr ) {
 
-      _sessionId += std::to_string(_descramblingSession);
+          uint32_t result = nvDsmOpen(&_descramblingSession, _systemsession->ApplicationSession(), TSID, Emi);
+          REPORT_DSM(result, "nvDsmOpen");
 
-      if( result == NV_DSM_SUCCESS ) {
-          result = nvDsmSetContext(_descramblingSession, static_cast<TNvHandle>(static_cast<IMediaSessionConnect*>(this)));
-          REPORT_DSM(result, "nvDsmSetContext");
+          _sessionId += std::to_string(_descramblingSession);
 
-          // note: only do this after initialization is completed  (we could in theory miss the first keyneeded)
           if( result == NV_DSM_SUCCESS ) {
-              systemsession->RegisterConnectSession(this);
+              result = nvDsmSetContext(_descramblingSession, static_cast<TNvHandle>(static_cast<IMediaSessionConnect*>(this)));
+              REPORT_DSM(result, "nvDsmSetContext");
+
+              // note: only do this after initialization is completed  (we could in theory miss the first keyneeded)
+              if( result == NV_DSM_SUCCESS ) {
+                  _systemsession->RegisterConnectSession(this);
+              }
           }
       }
 
@@ -66,19 +66,16 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
-
-      //not caching the systemsession pointer is more safe in case the system session might accidently be closed
-      IMediaSessionSystem* systemsession;
-       uint32_t result = nvAsmGetContext(_applicationSession, reinterpret_cast<TNvHandle*>(&systemsession));
-       REPORT_ASM(result, "nvAsmGetContext");
-       ASSERT( systemsession != nullptr );
  
-      // note: do this before descrambling handle is closed
-      if( systemsession != nullptr) {
-          systemsession->UnregisterConnectSession(this);
-      }
+    if( _systemsession != nullptr ) {
 
-      nvDsmClose(_descramblingSession);
+        _systemsession->UnregisterConnectSession(this);
+
+        _systemsession->Release();
+
+        nvDsmClose(_descramblingSession);
+    }
+
 }
 
 const char *MediaSessionConnect::GetSessionId() const {
@@ -93,7 +90,7 @@ void MediaSessionConnect::Run(const IMediaKeySessionCallback* callback) {
 
   ASSERT ((callback == nullptr) ^ (_callback == nullptr));
 
-  _callback = callback;   
+  _callback = const_cast<IMediaKeySessionCallback*>(callback);  
 }
 
 void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
@@ -153,7 +150,7 @@ CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, c
 }
 
 void MediaSessionConnect::OnNeedKey() {
-
+     _callback->OnKeyMessage(nullptr, 0, const_cast<char*>("KEYNEEDED"));
 }
 
 

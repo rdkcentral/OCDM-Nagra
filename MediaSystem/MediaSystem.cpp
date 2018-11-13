@@ -65,7 +65,7 @@ public:
         uint32_t f_cbCDMData, 
         IMediaKeySession **f_ppiMediaKeySession) {
 
-        *f_ppiMediaKeySession = new CDMi::MediaSessionSystem(f_pbInitData, f_cbInitData);
+        *f_ppiMediaKeySession = CDMi::MediaSessionSystem::CreateMediaSessionSystem(f_pbInitData, f_cbInitData);
  
         return CDMi_SUCCESS; 
     }
@@ -77,9 +77,9 @@ public:
         return CDMi_S_FALSE;
     }
 
-    CDMi_RESULT DestroyMediaKeySession(IMediaKeySession *f_piMediaKeySession) {
+    CDMi_RESULT DestroyMediaKeySession(IMediaKeySession* f_piMediaKeySession) {
 
-        delete f_piMediaKeySession;
+        CDMi::MediaSessionSystem::DestroyMediaSessionSystem(f_piMediaKeySession);
 
         return CDMi_SUCCESS; 
     }
