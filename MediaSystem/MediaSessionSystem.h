@@ -43,7 +43,7 @@ private:
         ECMDELIVERY  = 0x0040,
     };
 
-    MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
+    MediaSessionSystem(const uint8_t *data, uint32_t length);
     ~MediaSessionSystem();
 
 public:
@@ -130,6 +130,7 @@ private:
     TNvSession _deliverySession;
     TNvSession  _provioningSession;
     ConnectSessionStorage _connectsessions;
+    uint32_t _casID;
     mutable uint32_t _referenceCount;
     
 };

@@ -289,7 +289,7 @@ std::string MediaSessionSystem::CreateRenewalExchange() {
     return(exportMessage);
 }
 
-MediaSessionSystem::MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData)
+MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _applicationSession(0)
@@ -297,7 +297,14 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_c
     , _deliverySession(0)
     , _provioningSession(0)
     , _connectsessions()
+    , _casID(0)
     , _referenceCount(1) {
+
+   if( length >= 4 ) {
+        WPEFramework::Core::FrameType<0>::Reader reader(WPEFramework::Core::FrameType<0>(const_cast<uint8_t *>(data), length), 0);
+
+        _casID = reader.Number<uint32_t>();
+   }
 
     OperatorVault vault("test.txt");
     string vaultcontent = vault.LoadOperatorVault();
