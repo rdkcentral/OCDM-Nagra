@@ -16,7 +16,7 @@
 
 #pragma once
 
-#include <Nagra/prm_asm.h>
+#include <nagra/prm_asm.h>
 
 namespace CDMi {
 

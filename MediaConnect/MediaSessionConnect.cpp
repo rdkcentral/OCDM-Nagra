@@ -21,7 +21,7 @@
 #include "../IMediaSessionSystem.h"
 #include "../Report.h"
 
-#include <Nagra/prm_asm.h>
+#include <nagra/prm_asm.h>
 
 
 namespace CDMi {
