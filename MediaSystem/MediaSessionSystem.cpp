@@ -306,7 +306,7 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length)
         _casID = reader.Number<uint32_t>();
    }
 
-    OperatorVault vault("test.txt");
+    OperatorVault vault("/etc/nagra/op_vault.json");
     string vaultcontent = vault.LoadOperatorVault();
 
     TNvBuffer tmp = { const_cast<char*>(vaultcontent.c_str()), vaultcontent.length() + 1 };
