@@ -1,13 +1,19 @@
-# - Try to find PlayReady
+# - Try to find Nagra
 # Once done this will define
-#  NAGRA_FOUND - System has PlayReady
-#  NAGRA_INCLUDE_DIRS - The PlayReady include directories
-#  NAGRA_LIBRARIES - The libraries needed to use PlayReady
-#  NAGRA_FLAGS - The flags needed to use PlayReady
+#  NAGRA_FOUND - System has Nagra
+#  NAGRA_INCLUDE_DIRS - The Nagra include directories
+#  NAGRA_LIBRARIES - The libraries needed to use Nagra
+#  NAGRA_FLAGS - The flags needed to use Nagra
 #
 
+if(${CMAKE_BUILD_TYPE} STREQUAL "Debug")
+    set(NAGRA_LIB_NAME libnagra_cma_dbg)
+else()
+    set(NAGRA_LIB_NAME libnagra_cma_rel)
+endif()
+
 find_package(PkgConfig)
-pkg_check_modules(PC_NAGRA nagra)
+pkg_check_modules(PC_NAGRA REQUIRED ${NAGRA_LIB_NAME})
 
 if(PC_NAGRA_FOUND)
     if(NAGRA_FIND_VERSION AND PC_NAGRA_VERSION)
@@ -29,7 +35,7 @@ if(PC_NAGRA_FOUND)
 endif()
 
 include(FindPackageHandleStandardArgs)
-FIND_PACKAGE_HANDLE_STANDARD_ARGS(NAGRA DEFAULT_MSG NAGRA_INCLUDE_DIRS NAGRA_LIBRARIES)
+FIND_PACKAGE_HANDLE_STANDARD_ARGS(NAGRA DEFAULT_MSG NAGRA_LIBRARIES)
 
 mark_as_advanced(
     NAGRA_FOUND

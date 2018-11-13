@@ -23,7 +23,7 @@
 #include <map>
 #include <memory>
 
-#include <Nagra/nv_dpsc.h>
+#include <nagra/nv_dpsc.h>
 
 namespace CDMi {
 
