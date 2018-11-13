@@ -23,8 +23,8 @@
 #include <memory>
 #include <map>
 
-#include <Nagra/nv_dpsc.h>
-#include <Nagra/prm_dsm.h>
+#include <nagra/nv_dpsc.h>
+#include <nagra/prm_dsm.h>
 
 namespace CDMi {
 

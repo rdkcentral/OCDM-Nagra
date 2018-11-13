@@ -18,8 +18,8 @@
 
 #include <interfaces/IDRM.h> 
 
-#include <Nagra/prm_asm.h>
-#include <Nagra/prm_dsm.h>
+#include <nagra/prm_asm.h>
+#include <nagra/prm_dsm.h>
 
 #include "../IMediaSessionConnect.h"
 #include "../IMediaSessionSystem.h"
