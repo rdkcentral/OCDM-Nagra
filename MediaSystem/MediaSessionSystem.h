@@ -18,6 +18,7 @@
 
 #include <interfaces/IDRM.h> 
 
+#include <nagra/nagra_cma_platf.h>
 #include <nagra/prm_asm.h>
 #include <nagra/nv_imsm.h>
 
