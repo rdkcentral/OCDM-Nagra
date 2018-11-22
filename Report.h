@@ -29,11 +29,11 @@
     }  
 
 #define REPORT(x) 							\
-    fprintf(stderr, x);	\
+    fprintf(stderr, #x "\n");	\
     fflush(stderr);  
 
 #define REPORT_EXT(x, ...) 							\
-    fprintf(stderr, x, __VA_ARGS__);	\
+    fprintf(stderr, #x "\n", __VA_ARGS__);	\
     fflush(stderr);  
 
 #define REPORT_ASM_EXT(result, callname, x, ...) REPORT_PRM_EXT(NV_ASM_SUCCESS, callname, x, ...)
@@ -55,3 +55,18 @@
 #define REPORT_DPSC_EXT(result, callname, x, ...) REPORT_PRM_EXT(NV_DPSC_SUCCESS, callname, x, ...)
 
 #define REPORT_DPSC(result, callname) REPORT_PRM(NV_DPSC_SUCCESS, result, callname)
+
+
+static void DumpData(const char* buffername, const uint8_t data[], const uint16_t size) {
+  printf("Data for [%s] with length [%d]:\n", buffername, size);
+  if( size != 0 && data != nullptr) {
+    for (uint16_t teller = 0; teller < size; teller++) {
+        printf("%02X ", data[teller]);
+        if (((teller + 1) & 0x7) == 0) {
+        printf("\n");
+        }
+    }
+  }
+  printf("\n\n");
+  fflush(stdout);
+}

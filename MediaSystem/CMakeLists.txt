@@ -7,6 +7,10 @@ set(DRM_PLUGIN_SOURCES
     MediaSystem.cpp
     OperatorVault.cpp)
 
+find_package(Nagra REQUIRED)
+
+include_directories(${NAGRA_INCLUDE_DIRS})
+
 # add the library
 add_library(${PROJECT_NAME} SHARED ${DRM_PLUGIN_SOURCES})
 target_link_libraries(${PROJECT_NAME} ${NAGRA_LIBRARIES} ${WPEFRAMEWORK_LIBRARIES})

@@ -64,6 +64,5 @@ static SystemFactoryType<NagraConnect> g_instanceConnect({"video/x-h264", "audio
 }  // namespace CDMi
 
 CDMi::ISystemFactory* GetSystemFactory() {
-
     return (&CDMi::g_instanceConnect); 
 }

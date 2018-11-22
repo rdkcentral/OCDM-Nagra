@@ -8,7 +8,7 @@ set(DRM_PLUGIN_SOURCES
 
 # add the library
 add_library(${PROJECT_NAME} SHARED ${DRM_PLUGIN_SOURCES})
-target_link_libraries(${PROJECT_NAME} ${NAGRA_LIBRARIES} ${WPEFRAMEWORK_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${WPEFRAMEWORK_LIBRARIES})
 set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".drm")
 set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
 

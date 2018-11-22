@@ -24,33 +24,23 @@
 
 #include <vector>
 #include <set>
+#include <map>
 
 #include "../IMediaSessionSystem.h"
 #include "../IMediaSessionConnect.h"
+#include "../MediaRequest.h"
 
 namespace CDMi {
 
 class MediaSessionSystem : public IMediaKeySession, public IMediaSessionSystem {
 private:
-    using requestsSize = uint32_t; // do not just increase the size, part of the interface specification!
-
-    enum class Request : requestsSize {
-        FILTERS      = 0x0001,
-        KEYREADY     = 0x0002,
-        KEYNEEDED    = 0x0004,
-        RENEWAL      = 0x0008,
-        EMMDELIVERY  = 0x0010,
-        PROVISION    = 0x0020,
-        ECMDELIVERY  = 0x0040,
-    };
-
-    MediaSessionSystem(const uint8_t *data, uint32_t length);
+    MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault);
     ~MediaSessionSystem();
 
 public:
     //static const std::vector<std::string> m_mimeTypes;
 
-    static IMediaKeySession* CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
+    static IMediaKeySession* CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault);
     static void DestroyMediaSessionSystem(IMediaKeySession* session);
 
     // IMediaSessionSystem overrides
@@ -81,10 +71,10 @@ public:
         uint8_t  *f_pbClearContentOpaque );
 
     // IMediaSessionSystem overrides
-    void RegisterConnectSession(IMediaSessionConnect* session) override;
-    void UnregisterConnectSession(IMediaSessionConnect* session) override;
+    TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) override;
+    void CloseDescramblingSession(TNvSession session) override;
+    void SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) override;
 
-    virtual TNvSession ApplicationSession() const override;
 
     virtual void Addref() const override;
     virtual uint32_t Release() const override;
@@ -92,7 +82,9 @@ public:
 
 private:
     using FilterStorage = std::vector<TNvFilter>;
-    using ConnectSessionStorage = std::set<IMediaSessionConnect*>;
+    using ConnectSessionStorage = std::map<TNvSession, IMediaSessionConnect*>;
+    using DeliverySessionsStorage = std::set<TNvSession>;
+    using DataBuffer = std::vector<uint8_t>;
 
     static bool OnRenewal(TNvSession appSession);
     static bool OnNeedKey(TNvSession appSession, TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype);
@@ -100,11 +92,12 @@ private:
 
     void OnNeedKey(TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype);
     void OnRenewal();
-    void OnDeliveryCompleted();
-    FilterStorage GetFilters();
-    std::string GetProvisionChallenge();
+    void OnDeliverySessionCompleted(TNvSession deliverySession);
+    void GetFilters(FilterStorage& filters);
+    void GetProvisionChallenge(DataBuffer& buffer);
+    void InitializeWhenProvisoned();
+    void HandleFilters();
 
-    void CloseDeliverySession();
     void CloseProvisioningSession();
 
     void RequestReceived(Request request) {
@@ -119,7 +112,13 @@ private:
         return static_cast<Request>(static_cast<requestsSize>(_requests) & static_cast<requestsSize>(request)) == request;
     }
 
-    std::string CreateRenewalExchange();
+    inline TNvSession OpenKeyNeedSession();
+    inline void OpenRenewalSession();
+
+    inline TNvSession OpenDeliverySession();
+    inline void CloseDeliverySession(TNvSession session);
+
+    void CreateRenewalExchange(DataBuffer& buffer);
 
     static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONSYSTEM_ID:" };
 
@@ -128,7 +127,8 @@ private:
     Request _requests;
     TNvSession _applicationSession;
     TNvSession  _inbandSession;
-    TNvSession _deliverySession;
+    DeliverySessionsStorage _needKeySessions;
+    TNvSession  _renewalSession;
     TNvSession  _provioningSession;
     ConnectSessionStorage _connectsessions;
     uint32_t _casID;

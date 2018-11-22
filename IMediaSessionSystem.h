@@ -17,6 +17,7 @@
 #pragma once
 
 #include <nagra/prm_asm.h>
+#include <nagra/prm_dsm.h>
 
 namespace CDMi {
 
@@ -24,18 +25,25 @@ struct IMediaSessionConnect;
 
 struct IMediaSessionSystem {
 
-    static IMediaSessionSystem* SystemSession();
+    virtual TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) = 0; //returns Descramlbingsession ID
+    virtual void CloseDescramblingSession(TNvSession session) = 0;
 
-    virtual void RegisterConnectSession(IMediaSessionConnect* session) = 0;
-    virtual void UnregisterConnectSession(IMediaSessionConnect* session) = 0;
-
-    virtual TNvSession ApplicationSession() const = 0;
+    virtual void SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) = 0;
 
     virtual void Addref() const = 0;
     virtual uint32_t Release() const = 0;
 
 };
   
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+    CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface();
+
+#ifdef __cplusplus
+}
+#endif
 
 
 } // namespace CDMi
