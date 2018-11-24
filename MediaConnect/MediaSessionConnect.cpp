@@ -135,7 +135,7 @@ MediaSessionConnect::~MediaSessionConnect() {
         if ( _descramblingSession != 0 ) {
           REPORT("MediaSessionConnect::~MediaSessionConnect closing session");
 
-          _systemsession->CloseDescramblingSession(_descramblingSession);
+          _systemsession->CloseDescramblingSession(_descramblingSession, _TSID);
         }
 
         _systemsession->Release();
