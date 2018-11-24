@@ -70,6 +70,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _descramblingSession(0)
+    , _TSID(0)
     , _systemsession(nullptr) {
 
     REPORT("enter MediaSessionConnect::MediaSessionConnect"); 
@@ -91,7 +92,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
         WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
         WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
 
-       uint32_t TSID = reader.Number<uint32_t>();
+       _TSID = reader.Number<uint32_t>();
        uint16_t Emi = reader.Number<uint16_t>();
 
         _systemsession =  SessionSystem();
@@ -99,10 +100,10 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 
        if( _systemsession != nullptr ) {
 
-         REPORT_EXT("ConnectSession TSID used; %u", TSID);
+         REPORT_EXT("ConnectSession TSID used; %u", _TSID);
          REPORT_EXT("ConnectSession Emi used; %u", Emi);
 
-          _descramblingSession = _systemsession->OpenDescramblingSession(this, TSID, Emi);
+          _descramblingSession = _systemsession->OpenDescramblingSession(this, _TSID, Emi);
 
           _sessionId += std::to_string(_descramblingSession);
 
