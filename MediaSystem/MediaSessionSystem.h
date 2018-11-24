@@ -74,6 +74,7 @@ public:
     TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) override;
     void CloseDescramblingSession(TNvSession session, const uint32_t TSID) override;
     void SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) override;
+    void SetPlatformMetadata(TNvSession descamblingsession, const uint32_t TSID, uint8_t *data, size_t size) override;
 
 
     virtual void Addref() const override;

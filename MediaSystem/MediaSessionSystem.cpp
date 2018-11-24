@@ -766,6 +766,12 @@ void MediaSessionSystem::SetPrmContentMetadata(TNvSession descamblingsession, TN
     REPORT_DSM(result, "nvDsmSetPrmContentMetadata");
 }
 
+void MediaSessionSystem::SetPlatformMetadata(TNvSession descamblingsession, const uint32_t TSID, uint8_t *data, size_t size) {
+    int result = nagra_cma_platf_dsm_cmd(TSID, data, size);
+    REPORT_PRM_EXT(NAGRA_CMA_PLATF_OK, result,
+                   "nagra_cma_platf_dsm_cmd", " tsid=%u", TSID);
+}
+
 void MediaSessionSystem::Addref() const {
      WPEFramework::Core::InterlockedIncrement(_referenceCount);
 }

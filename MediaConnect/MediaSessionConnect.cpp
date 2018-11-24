@@ -202,6 +202,25 @@ void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
             reader.UnlockBuffer(buf.size);
             break;
         }
+        case Request::PLATFORMDELIVERY:
+        {
+            REPORT("NagraSytem importing PLATFORM Delivery");
+            assert( reader.HasData() == true );
+            const uint8_t * pbuffer;
+            size_t size = reader.LockBuffer<uint16_t>(pbuffer);
+            uint8_t *data = const_cast<uint8_t *>(pbuffer);
+            DumpData("NagraSystem::PLATFORMDelivery",
+                     (const uint8_t*) data, size);
+            if( _systemsession != nullptr ) {
+                _systemsession->SetPlatformMetadata(_descramblingSession, _TSID,
+                                                    data, size);
+            }
+            else {
+              REPORT("could not handle PLATFORMDELIVERY, no system available");
+            }
+            reader.UnlockBuffer(size);
+            break;
+        }
         default: /* WTF */
             break;
         }

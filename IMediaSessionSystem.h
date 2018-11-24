@@ -29,6 +29,7 @@ struct IMediaSessionSystem {
     virtual void CloseDescramblingSession(TNvSession session, const uint32_t TSID) = 0;
 
     virtual void SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) = 0;
+    virtual void SetPlatformMetadata(TNvSession descamblingsession, const uint32_t TSID, uint8_t *data, size_t size) = 0;
 
     virtual void Addref() const = 0;
     virtual uint32_t Release() const = 0;
