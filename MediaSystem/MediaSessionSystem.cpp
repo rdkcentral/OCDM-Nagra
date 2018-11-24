@@ -493,6 +493,12 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
     g_lock.Unlock();
  
     if( result == NV_ASM_SUCCESS ) {
+        // This should be moved to config, just like the operator vault path.
+        string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
+        result = nvAsmUseStorage(_applicationSession,
+                                 const_cast<char *>(asm_licenses_dir.c_str()));
+        REPORT_ASM(result, "nvAsmUseStorage");
+
         InitializeWhenProvisoned();
     }
 
