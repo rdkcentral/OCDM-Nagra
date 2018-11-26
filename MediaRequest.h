@@ -23,14 +23,15 @@ namespace CDMi {
     using requestsSize = uint32_t; // do not just increase the size, part of the interface specification!
 
     enum class Request : requestsSize {
-        NONE         = 0x0000,
-        FILTERS      = 0x0001,
-        KEYREADY     = 0x0002,
-        KEYNEEDED    = 0x0004,
-        RENEWAL      = 0x0008,
-        EMMDELIVERY  = 0x0010,
-        PROVISION    = 0x0020,
-        ECMDELIVERY  = 0x0040,
+        NONE             = 0x0000,
+        FILTERS          = 0x0001,
+        KEYREADY         = 0x0002,
+        KEYNEEDED        = 0x0004,
+        RENEWAL          = 0x0008,
+        EMMDELIVERY      = 0x0010,
+        PROVISION        = 0x0020,
+        ECMDELIVERY      = 0x0040,
+        PLATFORMDELIVERY = 0x0080,
     };
 
 } // namespace CDMi

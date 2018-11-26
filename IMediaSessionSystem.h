@@ -26,9 +26,10 @@ struct IMediaSessionConnect;
 struct IMediaSessionSystem {
 
     virtual TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) = 0; //returns Descramlbingsession ID
-    virtual void CloseDescramblingSession(TNvSession session) = 0;
+    virtual void CloseDescramblingSession(TNvSession session, const uint32_t TSID) = 0;
 
     virtual void SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) = 0;
+    virtual void SetPlatformMetadata(TNvSession descamblingsession, const uint32_t TSID, uint8_t *data, size_t size) = 0;
 
     virtual void Addref() const = 0;
     virtual uint32_t Release() const = 0;

@@ -493,6 +493,12 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
     g_lock.Unlock();
  
     if( result == NV_ASM_SUCCESS ) {
+        // This should be moved to config, just like the operator vault path.
+        string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
+        result = nvAsmUseStorage(_applicationSession,
+                                 const_cast<char *>(asm_licenses_dir.c_str()));
+        REPORT_ASM(result, "nvAsmUseStorage");
+
         InitializeWhenProvisoned();
     }
 
@@ -712,8 +718,13 @@ CDMi_RESULT MediaSessionSystem::ReleaseClearContent(const uint8_t*, uint32_t, co
  TNvSession MediaSessionSystem::OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) {
 
     TNvSession descramblingsession = 0;
+    int platStatus;
 
     g_lock.Lock(); // note: use same lock as registered callbacks!
+
+    platStatus = nagra_cma_platf_dsm_open(TSID);
+    REPORT_PRM_EXT(NAGRA_CMA_PLATF_OK, platStatus,
+                   "nagra_cma_platf_dsm_open", " tsid=%u", TSID);
 
     uint32_t result = nvDsmOpen(&descramblingsession, _applicationSession, TSID, Emi);
     REPORT_DSM(result, "nvDsmOpen");
@@ -727,7 +738,7 @@ CDMi_RESULT MediaSessionSystem::ReleaseClearContent(const uint8_t*, uint32_t, co
     return descramblingsession;
 }
 
-void MediaSessionSystem::CloseDescramblingSession(TNvSession session) {
+void MediaSessionSystem::CloseDescramblingSession(TNvSession session, const uint32_t TSID) {
      REPORT("enter MediaSessionSystem::UnregisterConnectSessionS");
 
     g_lock.Lock(); // note: use same lock as registered callbacks!
@@ -735,7 +746,13 @@ void MediaSessionSystem::CloseDescramblingSession(TNvSession session) {
     auto it = _connectsessions.find(session);
     ASSERT( it != _connectsessions.end() );
     if( it != _connectsessions.end() ) {
+        int platStatus;
         nvDsmClose(session);
+
+        platStatus = nagra_cma_platf_dsm_close(TSID);
+        REPORT_PRM_EXT(NAGRA_CMA_PLATF_OK, platStatus,
+                       "nagra_cma_platf_dsm_close", " tsid=%u", TSID);
+
         _connectsessions.erase(it);
     }
 
@@ -747,6 +764,12 @@ void MediaSessionSystem::CloseDescramblingSession(TNvSession session) {
 void MediaSessionSystem::SetPrmContentMetadata(TNvSession descamblingsession, TNvBuffer* data, TNvStreamType streamtype) {
     uint32_t result = nvDsmSetPrmContentMetadata(descamblingsession, data, streamtype);
     REPORT_DSM(result, "nvDsmSetPrmContentMetadata");
+}
+
+void MediaSessionSystem::SetPlatformMetadata(TNvSession descamblingsession, const uint32_t TSID, uint8_t *data, size_t size) {
+    int result = nagra_cma_platf_dsm_cmd(TSID, data, size);
+    REPORT_PRM_EXT(NAGRA_CMA_PLATF_OK, result,
+                   "nagra_cma_platf_dsm_cmd", " tsid=%u", TSID);
 }
 
 void MediaSessionSystem::Addref() const {

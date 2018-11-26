@@ -70,6 +70,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _descramblingSession(0)
+    , _TSID(0)
     , _systemsession(nullptr) {
 
     REPORT("enter MediaSessionConnect::MediaSessionConnect"); 
@@ -91,7 +92,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
         WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
         WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
 
-       uint32_t TSID = reader.Number<uint32_t>();
+       _TSID = reader.Number<uint32_t>();
        uint16_t Emi = reader.Number<uint16_t>();
 
         _systemsession =  SessionSystem();
@@ -99,10 +100,10 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
 
        if( _systemsession != nullptr ) {
 
-         REPORT_EXT("ConnectSession TSID used; %u", TSID);
+         REPORT_EXT("ConnectSession TSID used; %u", _TSID);
          REPORT_EXT("ConnectSession Emi used; %u", Emi);
 
-          _descramblingSession = _systemsession->OpenDescramblingSession(this, TSID, Emi);
+          _descramblingSession = _systemsession->OpenDescramblingSession(this, _TSID, Emi);
 
           _sessionId += std::to_string(_descramblingSession);
 
@@ -134,7 +135,7 @@ MediaSessionConnect::~MediaSessionConnect() {
         if ( _descramblingSession != 0 ) {
           REPORT("MediaSessionConnect::~MediaSessionConnect closing session");
 
-          _systemsession->CloseDescramblingSession(_descramblingSession);
+          _systemsession->CloseDescramblingSession(_descramblingSession, _TSID);
         }
 
         _systemsession->Release();
@@ -199,6 +200,25 @@ void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
               REPORT("could not handle ECMDELIVERY, no system available");
             }
             reader.UnlockBuffer(buf.size);
+            break;
+        }
+        case Request::PLATFORMDELIVERY:
+        {
+            REPORT("NagraSytem importing PLATFORM Delivery");
+            assert( reader.HasData() == true );
+            const uint8_t * pbuffer;
+            size_t size = reader.LockBuffer<uint16_t>(pbuffer);
+            uint8_t *data = const_cast<uint8_t *>(pbuffer);
+            DumpData("NagraSystem::PLATFORMDelivery",
+                     (const uint8_t*) data, size);
+            if( _systemsession != nullptr ) {
+                _systemsession->SetPlatformMetadata(_descramblingSession, _TSID,
+                                                    data, size);
+            }
+            else {
+              REPORT("could not handle PLATFORMDELIVERY, no system available");
+            }
+            reader.UnlockBuffer(size);
             break;
         }
         default: /* WTF */

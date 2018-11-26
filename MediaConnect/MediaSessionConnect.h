@@ -71,6 +71,7 @@ private:
     std::string _sessionId;
     IMediaKeySessionCallback* _callback;
     TNvSession _descramblingSession;
+    uint32_t _TSID;
     IMediaSessionSystem* _systemsession;
 
 };
