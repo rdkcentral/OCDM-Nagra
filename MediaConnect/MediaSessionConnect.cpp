@@ -114,7 +114,7 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
                     REPORT("parsing pssh systemid");
                     uint8_t buffer[buffersize];
                     reader.Copy(buffersize, buffer);
-                    error = ( memcmp (buffer, CommonEncryption, buffersize)  == 0 ) ? error : -3;
+              //      error = ( memcmp (buffer, CommonEncryption, buffersize)  == 0 ) ? error : -3;
                     remainingsize -= buffersize;     
 
                     if ( error == -1 && remainingsize >= 4 ) {

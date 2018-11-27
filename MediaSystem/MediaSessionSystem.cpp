@@ -70,7 +70,9 @@ namespace CDMi {
 
 /* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault) {
 
-    ASSERT(f_pbInitData == nullptr && f_cbInitData == 0); //as this is a singletion we do not expect any parameters as we do not take them into account
+    DumpData("MediaSessionSystem::CreateMediaSessionSystem", f_pbInitData, f_cbInitData);
+
+  //  ASSERT(f_pbInitData == nullptr && f_cbInitData == 0); //as this is a singletion we do not expect any parameters as we do not take them into account
 
     g_lock.Lock();
 
@@ -450,10 +452,6 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
 
 
     REPORT_EXT("going to test data access %u", length);
-
-    if(length > 0) {
-        uint8_t v = data[length-1];
-    }
 
     REPORT("date access tested");
 
