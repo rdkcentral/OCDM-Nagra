@@ -132,7 +132,6 @@ private:
     TNvSession  _renewalSession;
     TNvSession  _provioningSession;
     ConnectSessionStorage _connectsessions;
-    uint32_t _casID;
     mutable uint32_t _referenceCount;
     
 };

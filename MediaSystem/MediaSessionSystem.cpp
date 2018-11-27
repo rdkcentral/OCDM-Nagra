@@ -70,30 +70,25 @@ namespace CDMi {
 
 /* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault) {
 
-    // create outside lock to not keep the locm during all the API calls
-    MediaSessionSystem* newsesssion = new MediaSessionSystem(f_pbInitData, f_cbInitData, operatorvault);
+    ASSERT(f_pbInitData == nullptr && f_cbInitData == 0); //as this is a singletion we do not expect any parameters as we do not take them into account
 
     g_lock.Lock();
 
-    g_instance = newsesssion;
-
-    g_lock.Unlock();
-
-    return newsesssion;
-}
-
-/* static */ void MediaSessionSystem::DestroyMediaSessionSystem(IMediaKeySession* systemsession) {
-
-    g_lock.Lock();
-
-    if( static_cast<IMediaKeySession*>(g_instance) == systemsession ) {
-        g_instance = nullptr;
+    if( g_instance == nullptr ) {
+        g_instance = new MediaSessionSystem(nullptr, 0, operatorvault);
+    }
+    else{
+        g_instance->Addref();
     }
 
     g_lock.Unlock();
 
-    static_cast<MediaSessionSystem*>(systemsession)->Release();
+    return g_instance;
+}
 
+/* static */ void MediaSessionSystem::DestroyMediaSessionSystem(IMediaKeySession* systemsession) {
+
+    static_cast<MediaSessionSystem*>(systemsession)->Release();
 }
 
 /* static */ bool MediaSessionSystem::OnRenewal(TNvSession appSession) {
@@ -444,7 +439,6 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
     , _renewalSession(0)
     , _provioningSession(0)
     , _connectsessions()
-    , _casID(0)
     , _referenceCount(1) {
 
  //   REPORT_EXT("operator vault location %s", operatorvault.c_str());
@@ -462,13 +456,6 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
     }
 
     REPORT("date access tested");
-
-   if( length >= 4 ) {
-        WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
-        WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
-
-        _casID = reader.Number<uint32_t>();
-   }
 
     OperatorVault vault("/etc/nagra/op_vault.json");
     string vaultcontent = vault.LoadOperatorVault();
@@ -531,6 +518,8 @@ MediaSessionSystem::~MediaSessionSystem() {
         g_ApplicationSessionMap.erase(index);
         nvAsmClose(_applicationSession);
      }
+
+     g_instance == nullptr; // we are closing the singleton
 
     g_lock.Unlock();
     
@@ -779,16 +768,23 @@ void MediaSessionSystem::Addref() const {
 uint32_t MediaSessionSystem::Release() const {
      REPORT("enter MediaSessionSystem::Release");
 
+    g_lock.Lock(); // need lock here as wel as in CreateMediaSessionSystem(), as the final release can come from external as well as from the connect session
+
+    uint32_t retval = WPEFramework::Core::ERROR_NONE;
+
      REPORT_EXT("MediaSessionSystem::Release %u", _referenceCount);
 
     if (WPEFramework::Core::InterlockedDecrement(_referenceCount) == 0) {
         delete this;
      REPORT("leave MediaSessionSystem::Release deleted");
 
-        return (WPEFramework::Core::ERROR_DESTRUCTION_SUCCEEDED);
+        uint32_t retval = WPEFramework::Core::ERROR_DESTRUCTION_SUCCEEDED;
     }
+
+    g_lock.Unlock();
+
      REPORT("leave MediaSessionSystem::Release  not deleted");
-    return (WPEFramework::Core::ERROR_NONE);
+    return retval;
 }
 
 
