@@ -97,40 +97,46 @@ MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
         REPORT_EXT("Found %u bytes of pssh header data", remainingsize);
         ASSERT(remainingsize >= 4); 
         remainingsize -= 4;
+
         if( remainingsize >= 4 ) {
             REPORT("parsing pssh id");
             uint32_t psshident = reader.Number<uint32_t>();
             error = psshident == 0x70737368 ? error : -2;   
             remainingsize -= 4;     
+
             if ( error == -1 && remainingsize >= 4 ) {
                 REPORT("parsing pssh header");
                 uint32_t header = reader.Number<uint32_t>();
                 remainingsize -= 4;     
                 constexpr uint16_t buffersize = 16;
+
                 if ( remainingsize >= buffersize ) {
                     REPORT("parsing pssh systemid");
                     uint8_t buffer[buffersize];
                     reader.Copy(buffersize, buffer);
                     error = ( memcmp (buffer, CommonEncryption, buffersize)  == 0 ) ? error : -3;
                     remainingsize -= buffersize;     
+
                     if ( error == -1 && remainingsize >= 4 ) {
                         REPORT("parsing pssh kids");
-                        uint32_t KIDcount = reader.Number<uint32_t>();
+
+                        const uint8_t* buffer = nullptr;
+                        uint32_t KIDcount = reader.LockBuffer<uint32_t>(buffer);
+                        remainingsize -= 4;
+                        
                         //for now we are not interested in the KIDs
                         REPORT_EXT("Found %u of KIDs", KIDcount);
-                        remainingsize -= 4;     
-                        if( remainingsize >= ( KIDcount * buffersize ) ) {
-                            for(uint32_t kid = KIDcount; kid > 0; --kid ) {
-                                REPORT("parsing pssh kid");
-                                reader.Copy(buffersize, buffer);
-                            }
+                        if( remainingsize >= ( KIDcount * 16 ) ) {
+                            reader.UnlockBuffer(KIDcount * 16);    
                             remainingsize -= ( KIDcount * buffersize );
+
                             //now we got to the private data we are looking for...
                             if( remainingsize >= 4 ) {
                                 REPORT("parsing pssh private data length");
                                 uint32_t datalength = reader.Number<uint32_t>();
                                 REPORT_EXT("Found %u bytes of private data", datalength);
                                 remainingsize -= 4;
+
                                 if( datalength >= 6 && remainingsize >= 6 ) {
                                   REPORT("parsing pssh private data");
                                   _TSID = reader.Number<uint32_t>();
