@@ -35,9 +35,6 @@ namespace {
 
     WPEFramework::Core::CriticalSection g_lock;
 
-    using ApplicationSessionLookupMap = std::map<TNvSession, CDMi::MediaSessionSystem*>;
-    ApplicationSessionLookupMap g_ApplicationSessionMap;
-
     using DeliverySessionLookupMap = std::map<TNvSession, CDMi::MediaSessionSystem*>;
     DeliverySessionLookupMap g_DeliverySessionMap;
 
@@ -98,11 +95,8 @@ namespace CDMi {
 
     g_lock.Lock();
 
-    ApplicationSessionLookupMap::iterator index (g_ApplicationSessionMap.find(appSession));
-
-    if (index != g_ApplicationSessionMap.end()) {
-        index->second->OnRenewal(); 
-    }
+    ASSERT( g_instance->_applicationSession == appSession );
+    g_instance->OnRenewal(); 
 
     g_lock.Unlock();
 
@@ -129,11 +123,8 @@ void MediaSessionSystem::OnRenewal() {
 
     g_lock.Lock();
 
-    ApplicationSessionLookupMap::iterator index (g_ApplicationSessionMap.find(appSession));
-
-    if (index != g_ApplicationSessionMap.end()) {
-        index->second->OnNeedKey(descramblingSession, keyStatus, content, streamtype); 
-    }
+    ASSERT( g_instance->_applicationSession == appSession );
+    g_instance->OnNeedKey(descramblingSession, keyStatus, content, streamtype); 
 
     g_lock.Unlock();
 
@@ -477,10 +468,6 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
         RequestReceived(Request::PROVISION);
     }
     REPORT_ASM(result, "nvAsmOpen");
-
-    g_lock.Lock();
-    g_ApplicationSessionMap[_applicationSession] = this;
-    g_lock.Unlock();
  
     if( result == NV_ASM_SUCCESS ) {
         InitializeWhenProvisoned();
@@ -505,18 +492,13 @@ MediaSessionSystem::~MediaSessionSystem() {
 
     CloseDeliverySession(_renewalSession);
 
-    ApplicationSessionLookupMap::iterator index (g_ApplicationSessionMap.find(_applicationSession));
-
  //   for(TNvSession session : _needKeySessions) {
  //       CloseDeliverySession(session);
  //   }  
 
-    if (index != g_ApplicationSessionMap.end()) {
-        g_ApplicationSessionMap.erase(index);
-        nvAsmClose(_applicationSession);
-     }
+    nvAsmClose(_applicationSession);
 
-     g_instance == nullptr; // we are closing the singleton
+    g_instance == nullptr; // we are closing the singleton
 
     g_lock.Unlock();
     
