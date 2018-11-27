@@ -121,7 +121,7 @@ private:
 
     void CreateRenewalExchange(DataBuffer& buffer);
 
-    static constexpr const char* const g_NAGRASessionIDPrefix { "NAGRA_SESSIONSYSTEM_ID:" };
+    constexpr static const char* const g_NAGRASessionIDPrefix = { "NAGRA_SESSIONSYSTEM_ID:" };
 
     std::string _sessionId;
     IMediaKeySessionCallback* _callback;
