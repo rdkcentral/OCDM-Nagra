@@ -65,16 +65,16 @@ CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface() {
 
 namespace CDMi {
 
-/* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault) {
+/* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault, const std::string& licensepath) {
 
-    DumpData("MediaSessionSystem::CreateMediaSessionSystem", f_pbInitData, f_cbInitData);
+   // DumpData("MediaSessionSystem::CreateMediaSessionSystem", f_pbInitData, f_cbInitData);
 
-  //  ASSERT(f_pbInitData == nullptr && f_cbInitData == 0); //as this is a singletion we do not expect any parameters as we do not take them into account
+    ASSERT( f_cbInitData == 0 ); //as this is a singletion we do not expect any parameters as we do not take them into account
 
     g_lock.Lock();
 
     if( g_instance == nullptr ) {
-        g_instance = new MediaSessionSystem(nullptr, 0, operatorvault);
+        g_instance = new MediaSessionSystem(nullptr, 0, operatorvault, licensepath);
     }
     else{
         g_instance->Addref();
@@ -407,9 +407,8 @@ void MediaSessionSystem::InitializeWhenProvisoned() {
         REPORT_IMSM(result, "nvImsmOpen");
     }
 
-    // This should be moved to config, just like the operator vault path.
-    string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
-    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(asm_licenses_dir.c_str()));
+ //   string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
+    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(_licensepath.c_str()));
     REPORT_ASM(result, "nvAsmUseStorage");
 
     REPORT("enter MediaSessionSystem::MediaSessionSystem");
@@ -427,7 +426,7 @@ void MediaSessionSystem::HandleFilters() {
     
 }
 
-MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault)
+MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault, const std::string& licensepath)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _requests(Request::NONE)
@@ -437,9 +436,11 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
     , _renewalSession(0)
     , _provioningSession(0)
     , _connectsessions()
+    , _licensepath(licensepath)
     , _referenceCount(1) {
 
- //   REPORT_EXT("operator vault location %s", operatorvault.c_str());
+    REPORT_EXT("operator vault location %s", operatorvault.c_str());
+   REPORT_EXT("license path location %s", _licensepath.c_str());
 
     REPORT("enter MediaSessionSystem::MediaSessionSystem");
 
@@ -451,7 +452,8 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
 
     REPORT("date access tested");
 
-    OperatorVault vault("/etc/nagra/op_vault.json");
+ //   OperatorVault vault("/etc/nagra/op_vault.json");
+    OperatorVault vault(operatorvault.c_str());
     string vaultcontent = vault.LoadOperatorVault();
 
     TNvBuffer tmp = { const_cast<char*>(vaultcontent.c_str()), vaultcontent.length() + 1 };
@@ -498,11 +500,11 @@ MediaSessionSystem::~MediaSessionSystem() {
 
     nvAsmClose(_applicationSession);
 
-    g_instance == nullptr; // we are closing the singleton
+    g_instance = nullptr; // we are closing the singleton
 
     g_lock.Unlock();
     
-    ASSERT( _connectsessions.size() == 0 ); //that would be strange if this would not be the case, problem with the refcounting...
+ //   ASSERT( _connectsessions.size() == 0 ); //that would be strange if this would not be the case, problem with the refcounting...
 
     REPORT("enter MediaSessionSystem::~MediaSessionSystem");
 
@@ -520,7 +522,7 @@ void MediaSessionSystem::Run(const IMediaKeySessionCallback* callback) {
 
   REPORT("MediaSessionSystem::Run");
 
-  ASSERT ((callback == nullptr) ^ (_callback == nullptr));
+//  ASSERT ((callback == nullptr) ^ (_callback == nullptr));
 
   g_lock.Lock();
 
@@ -593,7 +595,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
         case Request::KEYNEEDED: //fallthrough on purpose
         case Request::RENEWAL: 
         { 
-            assert( reader.HasData() == true );
+            ASSERT( reader.HasData() == true );
             string response = reader.Text();
             TNvBuffer buf = { const_cast<char*>(response.c_str()), response.length() + 1 }; 
             DumpData("NagraSystem::RenewalResponse|Keyneeded", (const uint8_t*)buf.data, buf.size);
@@ -604,7 +606,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
         case Request::EMMDELIVERY:
         {
             REPORT("NagraSytem importing EMM response");
-            assert( reader.HasData() == true );
+            ASSERT( reader.HasData() == true );
             TNvBuffer buf = { nullptr, 0 }; 
             const uint8_t* pbuffer;
             buf.size = reader.LockBuffer<uint16_t>(pbuffer);
@@ -618,7 +620,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
         case Request::PROVISION:
         {
             REPORT("NagraSytem importing provsioning response");
-            assert( reader.HasData() == true );
+            ASSERT( reader.HasData() == true );
             string response = reader.Text();
             TNvBuffer buf = { const_cast<char*>(response.c_str()), response.length() + 1 }; 
             DumpData("NagraSystem::ProvisionResponse", (const uint8_t*)buf.data, buf.size);

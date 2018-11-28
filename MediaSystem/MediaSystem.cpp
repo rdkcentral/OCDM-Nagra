@@ -65,18 +65,23 @@ private:
 
     public:
         Config () 
-            : OperatorVaultPath() {
+            : OperatorVaultPath()
+            , LicensePath() {
             Add("operatorvault", &OperatorVaultPath);
+            Add("licensepath", &LicensePath);
         }
         Config (const Config& copy) 
-            : OperatorVaultPath(copy.OperatorVaultPath) {
+            : OperatorVaultPath(copy.OperatorVaultPath)
+            , LicensePath(copy.LicensePath) {
             Add("operatorvault", &OperatorVaultPath);
+            Add("licensepath", &LicensePath);
         }
         virtual ~Config() {
         }
 
     public:
         WPEFramework::Core::JSON::String OperatorVaultPath;
+        WPEFramework::Core::JSON::String LicensePath;
     };
 
 
@@ -85,19 +90,22 @@ private:
 
 public:
     NagraSystem(const NagraSystem& system)
-    : _operatorvaultpath(system._operatorvaultpath) {
+    : _operatorvaultpath(system._operatorvaultpath)
+    , _licensepath(system._licensepath) {
     }
 
     NagraSystem() 
-    : _operatorvaultpath() {
+    : _operatorvaultpath()
+    , _licensepath() {
     }
-    ~NagraSystem(void) {
+    ~NagraSystem() {
     }
 
    void OnSystemConfigurationAvailable(const std::string& configline) {
         Config config; 
         config.FromString(configline);
         _operatorvaultpath = config.OperatorVaultPath.Value();
+        _licensepath = config.LicensePath.Value();
     }
 
     CDMi_RESULT CreateMediaKeySession(
@@ -125,6 +133,7 @@ public:
 
     private:
     std::string _operatorvaultpath;
+    std::string _licensepath;
 };
 
 static SystemFactoryType<NagraSystem> g_instanceSystem({"video/x-h264", "audio/mpeg"});
@@ -138,7 +147,7 @@ CDMi_RESULT NagraSystem::CreateMediaKeySession(
     uint32_t f_cbCDMData, 
     IMediaKeySession **f_ppiMediaKeySession) {
 
-    *f_ppiMediaKeySession = CDMi::MediaSessionSystem::CreateMediaSessionSystem(f_pbInitData, f_cbInitData,  _operatorvaultpath);
+    *f_ppiMediaKeySession = CDMi::MediaSessionSystem::CreateMediaSessionSystem(f_pbInitData, f_cbInitData,  _operatorvaultpath, _licensepath);
 
     return CDMi_SUCCESS; 
 }

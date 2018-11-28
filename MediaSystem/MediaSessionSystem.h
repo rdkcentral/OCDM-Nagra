@@ -34,13 +34,14 @@ namespace CDMi {
 
 class MediaSessionSystem : public IMediaKeySession, public IMediaSessionSystem {
 private:
-    MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault);
+    MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault, const std::string& licensepath);
     ~MediaSessionSystem();
 
-public:
-    //static const std::vector<std::string> m_mimeTypes;
+public:    
+    MediaSessionSystem(const MediaSessionSystem&) = delete;
+    MediaSessionSystem& operator=(const MediaSessionSystem&) = delete;
 
-    static IMediaKeySession* CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault);
+    static IMediaKeySession* CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault, const std::string& licensepath);
     static void DestroyMediaSessionSystem(IMediaKeySession* session);
 
     // IMediaSessionSystem overrides
@@ -132,6 +133,7 @@ private:
     TNvSession  _renewalSession;
     TNvSession  _provioningSession;
     ConnectSessionStorage _connectsessions;
+    std::string _licensepath;
     mutable uint32_t _referenceCount;
     
 };

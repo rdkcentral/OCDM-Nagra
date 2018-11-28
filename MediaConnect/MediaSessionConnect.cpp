@@ -65,6 +65,9 @@ CDMi::IMediaSessionSystem* SessionSystem() {
 
 namespace CDMi {
 
+const uint8_t MediaSessionConnect::CommonEncryption[] = { 0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b };
+
+
 MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)

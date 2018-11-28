@@ -35,6 +35,9 @@ public:
     MediaSessionConnect(const uint8_t *f_pbInitData, uint32_t f_cbInitData);
     ~MediaSessionConnect();
 
+    MediaSessionConnect(const MediaSessionConnect&) = delete;
+    MediaSessionConnect& operator=(const MediaSessionConnect&) = delete;
+
     // IMediaSessionConnect overrides
     virtual void Run(const IMediaKeySessionCallback *callback) override;
     virtual void Update( const uint8_t *response, uint32_t responseLength) override;
@@ -67,7 +70,7 @@ public:
 
 private:
     constexpr static  const char* const g_NAGRASessionIDPrefix = { "NAGRA_SESSIONCONNECT_ID:" };
-    constexpr static uint8_t CommonEncryption[] = { 0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b };
+    static const uint8_t CommonEncryption[];
 
     std::string _sessionId;
     IMediaKeySessionCallback* _callback;
