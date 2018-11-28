@@ -407,8 +407,9 @@ void MediaSessionSystem::InitializeWhenProvisoned() {
         REPORT_IMSM(result, "nvImsmOpen");
     }
 
- //   string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
-    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(_licensepath.c_str()));
+    string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
+    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(asm_licenses_dir.c_str()));
+//    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(_licensepath.c_str()));
     REPORT_ASM(result, "nvAsmUseStorage");
 
     REPORT("enter MediaSessionSystem::MediaSessionSystem");
@@ -452,8 +453,8 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
 
     REPORT("date access tested");
 
- //   OperatorVault vault("/etc/nagra/op_vault.json");
-    OperatorVault vault(operatorvault.c_str());
+    OperatorVault vault("/etc/nagra/op_vault.json");
+ //   OperatorVault vault(operatorvault.c_str());
     string vaultcontent = vault.LoadOperatorVault();
 
     TNvBuffer tmp = { const_cast<char*>(vaultcontent.c_str()), vaultcontent.length() + 1 };
