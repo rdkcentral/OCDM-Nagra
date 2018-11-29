@@ -135,68 +135,51 @@ void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus 
 
     REPORT_EXT("NagraSystem::OnNeedkey triggered for descrambling session %u", descramblingSession);
 
-    // ignore decsrambling session
- //   if( descramblingSession == 0 ) {
+    if(content != nullptr) {
+        DumpData("NagraSystem::OnNeedKey", (const uint8_t*)(content->data), content->size);
+    }
 
-  //      REPORT("NagraSystem::OnNeedkey triggered for system");
+    if ( _callback != nullptr || descramblingSession != 0 ) {
 
-        if(content != nullptr) {
-            DumpData("NagraSystem::OnNeedKey", (const uint8_t*)(content->data), content->size);
-            }
-
-
-            if (_callback != nullptr) {
-
-      //          TNvSession deliverysession = OpenKeyNeedSession();
+        // TNvSession deliverysession = OpenKeyNeedSession();
       
-               TNvSession deliverysession = _renewalSession;
+        TNvSession deliverysession = _renewalSession;
 
-                uint32_t result = nvLdsUsePrmContentMetadata(deliverysession, content, streamtype);
-                REPORT_LDS(result,"nvLdsUsePrmContentMetadata");
-                REPORT("NagraSystem::OnNeedkey ContextMetadata set");
+        uint32_t result = nvLdsUsePrmContentMetadata(deliverysession, content, streamtype);
+        REPORT_LDS(result,"nvLdsUsePrmContentMetadata");
+        REPORT("NagraSystem::OnNeedkey ContextMetadata set");
 
-                TNvBuffer buf = { NULL, 0 };
+        TNvBuffer buf = { NULL, 0 };
 
-                result = nvLdsExportMessage(deliverysession, &buf);
-                REPORT_LDS(result, "nvLdsExportMessage");
+        result = nvLdsExportMessage(deliverysession, &buf);
+        REPORT_LDS(result, "nvLdsExportMessage");
 
-                if( result == NV_LDS_SUCCESS ) {
+        if( result == NV_LDS_SUCCESS ) {
 
-                    std::vector<uint8_t> buffer(buf.size);
-                    buf.data = static_cast<void*>(buffer.data());
-                    buf.size = buffer.size(); // just too make sure...
-                    result = nvLdsExportMessage(deliverysession, &buf);
-                    REPORT_LDS(result, "nvLdsExportMessage");
+            std::vector<uint8_t> buffer(buf.size);
+            buf.data = static_cast<void*>(buffer.data());
+            buf.size = buffer.size(); // just too make sure...
+            result = nvLdsExportMessage(deliverysession, &buf);
+            REPORT_LDS(result, "nvLdsExportMessage");
 
-                    if( result == NV_LDS_SUCCESS ) {
-                        DumpData("NagraSystem::OnNeedKey", buffer.data(), buffer.size());
+            if( result == NV_LDS_SUCCESS ) {
+                DumpData("NagraSystem::OnNeedKey export message", buffer.data(), buffer.size());
 
-                        _callback->OnKeyMessage(reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size(), const_cast<char*>("KEYNEEDED"));
+                if( descramblingSession == 0 ) {
+                    REPORT("NagraSystem::OnNeedkey triggered for system session");
+                    _callback->OnKeyMessage(reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size(), const_cast<char*>("KEYNEEDED"));
+                }
+                else {
+                    REPORT("NagraSystem::OnNeedkey triggered for connect session");
+                    auto it = _connectsessions.find(descramblingSession); 
+                    if( it != _connectsessions.end() ) {
+                        REPORT("NagraSystem::OnNeedkey triggered for connect session, sending...");
+                        it->second->OnKeyMessage(reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size(), const_cast<char*>("KEYNEEDED"));
                     }
                 }
-
             }
-            else {
-                ASSERT(false);
-                REPORT("NagraSystem::OnNeedkey triggerd while no callback set");
-            }
-//        }
-  //  else {
-/*
-        REPORT("NagraSystem::OnNeedkey triggered for connect session");
-
-        if(content != nullptr) {
-            DumpData("NagraSystem::OnNeedKey::Descrambling", (const uint8_t*)(content->data), content->size);
-        }
-
-        IMediaSessionConnect* connectsession = nullptr;
-
-        auto it = _connectsessions.find(descramblingSession); 
-        if( it != _connectsessions.end() ) {
-            it->second->OnNeedKey();
         }
     }
-*/
 }
 
 /* static */ bool MediaSessionSystem::OnDeliveryCompleted(TNvSession deliverySession) {

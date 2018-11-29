@@ -19,11 +19,8 @@
 
 namespace CDMi {
 
-   struct IMediaSessionConnect {
-
-       virtual void OnNeedKey() = 0;
-
+    struct IMediaSessionConnect {
+        virtual void OnKeyMessage(const uint8_t *f_pbKeyMessage, const uint32_t f_cbKeyMessage, const char *f_pszUrl) = 0;
     };
-
 
 } // namespace CDMi

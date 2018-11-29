@@ -330,8 +330,12 @@ CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, c
   return CDMi_S_FALSE;
 }
 
-void MediaSessionConnect::OnNeedKey() {
-     _callback->OnKeyMessage(nullptr, 0, const_cast<char*>("KEYNEEDED"));
+void MediaSessionConnect::OnKeyMessage(const uint8_t *f_pbKeyMessage, const uint32_t f_cbKeyMessage, const char *f_pszUrl)  {
+    REPORT("MediaSessionConnect::OnKeyMessage triggered...");
+    if( _callback != nullptr ) {
+        REPORT("MediaSessionConnect::OnKeyMessage sending...");
+        _callback->OnKeyMessage(f_pbKeyMessage, f_cbKeyMessage, const_cast<char*>(f_pszUrl));
+    }
 }
 
 

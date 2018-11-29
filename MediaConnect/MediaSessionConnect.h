@@ -65,8 +65,8 @@ public:
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
 
-      // IMediaSessionConnect overrides
-       void OnNeedKey() override;
+    // IMediaSessionConnect overrides
+    void OnKeyMessage(const uint8_t *f_pbKeyMessage, const uint32_t f_cbKeyMessage, const char *f_pszUrl) override;
 
 private:
     constexpr static  const char* const g_NAGRASessionIDPrefix = { "NAGRA_SESSIONCONNECT_ID:" };
