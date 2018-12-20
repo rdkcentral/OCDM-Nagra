@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 
-include(${CMAKE_SYSROOT}${CMAKE_INSTALL_PREFIX}/include/cmake/tools.cmake)
+include(${CMAKE_SYSROOT}${CMAKE_INSTALL_PREFIX}/include/cmake/WPEFramework.cmake)
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 
 find_package(Core REQUIRED)
