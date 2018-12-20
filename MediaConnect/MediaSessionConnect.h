@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <core/core.h>
+
 #include <interfaces/IDRM.h> 
 
 #include "../IMediaSessionConnect.h"
@@ -65,19 +67,24 @@ public:
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
 
+    // Note: the KeyUsable (and other) events are currently not (yet) triggered as it is not required by the current nagra client. 
+    //       In the future (e.g. before connect it to the WPEWebkit) this should be connected to the appicable Nagra callback (we are not sure
+    //       at this moment which one) to make this work with Clients that expect this callback
+    // virtual void OnKeyStatusUpdate(const char* keyMessage, const uint8_t* buffer, const uint8_t length) = 0;
+
+
     // IMediaSessionConnect overrides
     void OnKeyMessage(const uint8_t *f_pbKeyMessage, const uint32_t f_cbKeyMessage, const char *f_pszUrl) override;
 
 private:
-    constexpr static  const char* const g_NAGRASessionIDPrefix = { "NAGRA_SESSIONCONNECT_ID:" };
-    static const uint8_t CommonEncryption[];
-
+    constexpr static  const char* const g_NAGRASessionIDPrefix = { "NSCID:" };
+    
     std::string _sessionId;
-    IMediaKeySessionCallback* _callback;
+    IMediaKeySessionCallback* _callback; //note the Run() changing this member can be from another thread then the callback is being called. The MediaSessionConnect itself is protected in the lock in the systemsession. But we should protect againts the callback being deleted while called
     TNvSession _descramblingSession;
     uint32_t _TSID;
     IMediaSessionSystem* _systemsession;
-
+    WPEFramework::Core::CriticalSection _lock;
 };
 
 } // namespace CDMi

@@ -2,7 +2,8 @@ project(DRMNagraConnect)
 
 set(DRM_PLUGIN_SOURCES 
     MediaSessionConnect.cpp 
-    MediaConnect.cpp)
+    MediaConnect.cpp
+    ../ParsePSSHHeader.cpp)
 
 # add the library
 add_library(${PROJECT_NAME} SHARED ${DRM_PLUGIN_SOURCES})

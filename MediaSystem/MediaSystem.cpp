@@ -84,8 +84,6 @@ private:
         WPEFramework::Core::JSON::String LicensePath;
     };
 
-
-//    NagraSystem(const NagraSystem&) = delete;
     NagraSystem& operator= (const NagraSystem&) = delete;
 
 public:

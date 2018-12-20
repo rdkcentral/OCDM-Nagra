@@ -16,6 +16,8 @@
 
 #pragma once
 
+#include <core/core.h>
+
 #define REPORT_PRM_EXT(success, result, callname, x, ...) 							\
     if( result != success ) { \
         fprintf(stderr, "Call to %s failed, result = [%d]" #x "\n", callname, result, __VA_ARGS__);	\

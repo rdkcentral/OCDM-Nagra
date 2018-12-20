@@ -40,7 +40,7 @@ struct IMediaSessionSystem {
 extern "C" {
 #endif
 
-    CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface();
+    CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface(const char* systemsessionid);
 
 #ifdef __cplusplus
 }

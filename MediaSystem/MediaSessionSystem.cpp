@@ -18,26 +18,108 @@
 #include "OperatorVault.h"
 
 #include <core/core.h>
-#include "../Report.h"
+#include "../ParsePSSHHeader.h"
 
 #include <memory>
-#include <map>
+#include <queue>
+#include <functional>
+#include <utility>
+#include <algorithm>
 
 #include <nagra/nv_dpsc.h>
 #include <nagra/prm_dsm.h>
 
-
-
 namespace {
 
-    static CDMi::MediaSessionSystem* g_instance = nullptr;
-
-
     WPEFramework::Core::CriticalSection g_lock;
+/*
+    Noit needed for now as we do not send a OnKeyReady message
 
     using DeliverySessionLookupMap = std::map<TNvSession, CDMi::MediaSessionSystem*>;
     DeliverySessionLookupMap g_DeliverySessionMap;
+*/
+    //note: first element is reserved for default system, CDMi::MediaSessionSystem* is nullptr if not created (so element is always there)
+    using MediaSessionSystemStorageElement = std::pair<std::string, CDMi::MediaSessionSystem* >;
+    using MediaSessionSystemStorage = std::forward_list< MediaSessionSystemStorageElement >;
+    MediaSessionSystemStorage g_MediaSessionSystems;
 
+    struct CreateDefaultMediaSystemSession {
+        explicit CreateDefaultMediaSystemSession(const std::string& defaultoperatorvault) {
+           ASSERT( g_MediaSessionSystems.empty() == true );
+            g_MediaSessionSystems.push_front( MediaSessionSystemStorageElement(defaultoperatorvault, nullptr) );
+        }
+        ~CreateDefaultMediaSystemSession() {
+            ASSERT( g_MediaSessionSystems.empty() == false );
+            ASSERT( g_MediaSessionSystems.front().second == nullptr );
+            g_MediaSessionSystems.pop_front();
+            ASSERT( g_MediaSessionSystems.empty() == true );
+        }
+    };
+
+    // we of course don't want to create a thread per system so we only have one...
+
+    class CommandHandler : virtual public WPEFramework::Core::Thread {
+    public:
+        CommandHandler();
+        ~CommandHandler();
+
+        CommandHandler(const CommandHandler&) = delete;
+        CommandHandler& operator=(const CommandHandler&) = delete;
+
+        // no capture by move in C++11 yet, let's do it ourselves
+        class Data {
+            public:
+
+            explicit Data(CDMi::MediaSessionSystem::DataBuffer&& buffer)
+            : _databuffer(std::move(buffer)) {
+            }
+
+            Data(Data&& other) 
+            : _databuffer(std::move(other._databuffer)) {
+
+            }
+
+            const CDMi::MediaSessionSystem::DataBuffer& DataBuffer() const {
+                return _databuffer;
+            }
+
+            Data& operator=(Data&& other) {
+                if( this != &other ) {
+                    _databuffer = std::move(other._databuffer);
+                }
+                return *this;
+            }
+
+            private:
+
+            CDMi::MediaSessionSystem::DataBuffer _databuffer;  
+        };
+
+        using Command = std::function<void(const CDMi::MediaSessionSystem::DataBuffer&)>;
+        
+        void PostCommand(Command&& command, Data&& data);
+        
+    protected:
+        uint32_t Worker() override;
+
+        bool CommandVailable() const {
+            return ( _commands.empty() == false );
+        }
+
+    private:
+        using CommandPair = std::pair<Command, Data>;
+        using CommandsContainer = std::queue< CommandPair >;
+        CommandsContainer _commands;
+        WPEFramework::Core::CriticalSection _lock;
+    };
+
+    void PostCommandJob(CommandHandler::Command&& command, CDMi::MediaSessionSystem::DataBuffer&& data) { // this makes sure we do not start the thread before it is actually needed, not just when the drm is loaded
+        static CommandHandler commandhandler;
+
+        TRACE_L1("Posting a command job, native buffer %p", data.data());
+
+        commandhandler.PostCommand(std::move(command), CommandHandler::Data(std::move(data)));
+    }
 }
 
 #ifdef __cplusplus
@@ -45,18 +127,43 @@ extern "C" {
 #endif
 
 
-CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface() {
+CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface(const char* systemsessionid) {
+
+    TRACE_L1("Getting MediaSessionSystemInterface for %s", systemsessionid);
+
+    CDMi::IMediaSessionSystem* result( nullptr );
 
     g_lock.Lock();
 
-    CDMi::IMediaSessionSystem* retval = g_instance;
-    if( retval != nullptr ) {
-        retval->Addref();
-    } 
+    if( systemsessionid == nullptr ) { // note: nice and fast for the default case
+        TRACE_L1("Getting MediaSessionSystemInterface default one");
+        ASSERT(g_MediaSessionSystems.empty() == false);
+        result = g_MediaSessionSystems.front().second;
+    }
+    else{
+        //in case of the sessionid we now have to search for the right proxy systemid (please note systemid needs to be unique for higher OCDM layers otherwise tou get into trouble). 
+        // Now we just use the poxy ptr aqnd do a lookup here. There will not be that many proxies and connectsessions so it will not be a real bottleneck but perhaps we should have 
+        // scheme where the sessionid of the system itself is also part of the proxyid (but you do not want to make the proxyif too large so for now this will work)
+        TRACE_L1("Getting MediaSessionSystemInterface specific one");
+        auto index( g_MediaSessionSystems.begin() ); // do not skip the default one, no problem if we look for it explicitely
+        while( index != g_MediaSessionSystems.end() ) {
+            CDMi::MediaSessionSystem* system = index->second;
+            if( ( system != nullptr ) && ( system->HasProxyWithSessionID(systemsessionid) ) ) { // system == nullptr is valid for default system
+                result = system;
+                TRACE_L1("Getting MediaSessionSystemInterface specific one found! selected sessionid %s", system->GetSessionId());
+                break;
+            }
+            ++index;
+        }
+    }
+
+    if( result != nullptr ) {
+        result->Addref();
+    }
 
     g_lock.Unlock();
 
-    return retval;
+    return result;
 }
 
 #ifdef __cplusplus
@@ -65,40 +172,118 @@ CDMi::IMediaSessionSystem* GetMediaSessionSystemInterface() {
 
 namespace CDMi {
 
-/* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, uint32_t f_cbInitData, const std::string& operatorvault, const std::string& licensepath) {
+void MediaSessionSystem::MediaSessionSystemProxy::Run(const IMediaKeySessionCallback* f_piMediaKeySessionCallback) {
+    ASSERT ((f_piMediaKeySessionCallback == nullptr) ^ (_callback == nullptr));
+    g_lock.Lock(); // note changing the callback needs to be protected (certainly for setting it to nullptr as it can be called from a different thread
+    if( f_piMediaKeySessionCallback != nullptr ) {
+        _callback = const_cast<IMediaKeySessionCallback*>( f_piMediaKeySessionCallback );
+        _system.Run(*_callback);
+    }
+    else {
+        _callback = nullptr;
+    }
+    g_lock.Unlock();
+} 
 
-   // DumpData("MediaSessionSystem::CreateMediaSessionSystem", f_pbInitData, f_cbInitData);
 
-    ASSERT( f_cbInitData == 0 ); //as this is a singletion we do not expect any parameters as we do not take them into account
+/* static */ IMediaKeySession* MediaSessionSystem::CreateMediaSessionSystem(const uint8_t *f_pbInitData, const uint32_t f_cbInitData, const std::string& defaultoperatorvault, const std::string& licensepath) {
+        TRACE_L1("Create MediaSessionSystem called");
+
+    return new MediaSessionSystem::MediaSessionSystemProxy( AddMediaSessionInstance(f_pbInitData, f_cbInitData, defaultoperatorvault, licensepath) );
+}
+
+/* static */ void MediaSessionSystem::DestroyMediaSessionSystem(IMediaKeySession* systemsession) {
+    ASSERT( systemsession != nullptr );
+    TRACE_L1("Destroy MediaSessionSystem called");
+    delete systemsession;
+}
+
+/* static */ MediaSessionSystem& MediaSessionSystem::AddMediaSessionInstance(const uint8_t *f_pbInitData, const uint32_t f_cbInitData, const std::string& defaultoperatorvault, const std::string& licensepath) {
+    static CreateDefaultMediaSystemSession createdefaultmediasession(defaultoperatorvault);
+
+    // DumpData("MediaSessionSystem::CreateMediaSessionSystem", f_pbInitData, f_cbInitData);
+    MediaSessionSystem* system = nullptr;
 
     g_lock.Lock();
 
-    if( g_instance == nullptr ) {
-        g_instance = new MediaSessionSystem(nullptr, 0, operatorvault, licensepath);
+    if( f_cbInitData == 0 ) { //we are the default media session
+        ASSERT( g_MediaSessionSystems.empty() == false );
+        if( g_MediaSessionSystems.front().second == nullptr ) { // default session was not there yet
+ 
+            ASSERT( g_MediaSessionSystems.front().first == defaultoperatorvault );
+            system = new MediaSessionSystem(nullptr, 0, defaultoperatorvault, licensepath);
+            g_MediaSessionSystems.front().second = system;
+        }
+        else {
+            ASSERT(g_MediaSessionSystems.front().first == defaultoperatorvault);
+            system = g_MediaSessionSystems.front().second;
+            system->Addref();
+        }
     }
-    else{
-        g_instance->Addref();
+    else {
+        // session created on operator vault
+        // now we should have a pssh header 
+        const uint8_t *privatedata = f_pbInitData;
+        int32_t result = FindPSSHHeaderPrivateData(privatedata, f_cbInitData);
+        if( result > 0 ) {
+
+            std::string operatorvault(reinterpret_cast<const char*>(privatedata), result);
+
+            auto index( g_MediaSessionSystems.begin() ); //let's also take the default into account, if it is the same as the explicit file they are the same system
+            while( index != g_MediaSessionSystems.end() ) {
+                if( index->first == operatorvault ) {
+                    system = index->second;    
+                    system->Addref();
+                    break;
+                }
+                ++index;
+            }
+            if( system == nullptr ) {
+                // okay, system was not created for this operator vault yet
+                system = new MediaSessionSystem(nullptr, 0, operatorvault, licensepath);
+             g_MediaSessionSystems.insert_after(g_MediaSessionSystems.begin(), MediaSessionSystemStorageElement(operatorvault, system));
+            }
+        }
+        else {
+            REPORT_EXT("incorrect pssh header or no private data: %i", result);
+        }
     }
 
     g_lock.Unlock();
 
-    return g_instance;
+    ASSERT( system != nullptr ); // we should have a system now...
+
+    return *system;
 }
 
-/* static */ void MediaSessionSystem::DestroyMediaSessionSystem(IMediaKeySession* systemsession) {
+/* static */ void MediaSessionSystem::RemoveMediaSessionInstance(MediaSessionSystem* session) {
+    // should already be in the lock...
 
-    static_cast<MediaSessionSystem*>(systemsession)->Release();
+    for( auto index = g_MediaSessionSystems.begin(), previousindex = g_MediaSessionSystems.before_begin(); index != g_MediaSessionSystems.end(); previousindex = index, ++index ) {
+        if( index->second == session)  {
+            if( index == g_MediaSessionSystems.begin() ) { //first index is default system, only remove pointer
+                index->second = nullptr;
+            }
+            else {
+                g_MediaSessionSystems.erase_after(previousindex);
+            }
+            break;
+        }
+    }
 }
 
 /* static */ bool MediaSessionSystem::OnRenewal(TNvSession appSession) {
     REPORT("static NagraSystem::OnRenewal triggered");
 
-    g_lock.Lock();
+    g_lock.Lock(); //mhmm, is this necessary? Would it be possible if Nagra still calls back when we are destructing the system? Guess so... Then we assume MediaSessionSystemFromAsmHandle to return  afterwards, should we set the Nagra callback to null to prevent this, then we can get rid of the lock. But then we need to protect the proxies registered, don't forget 
 
-    ASSERT( g_instance->_applicationSession == appSession );
-    g_instance->OnRenewal(); 
+    MediaSessionSystem* session = MediaSessionSystemFromAsmHandle(appSession);
+    if( session != nullptr ) {
+        session->OnRenewal();
+    }
 
     g_lock.Unlock();
+
 
     return true;
 }
@@ -106,15 +291,12 @@ namespace CDMi {
 void MediaSessionSystem::OnRenewal() {
     REPORT("NagraSystem::OnRenewal triggered");
 
-   if (_callback != nullptr) {
-       DataBuffer buffer;
-       CreateRenewalExchange(buffer);
-        _callback->OnKeyMessage(buffer.data(), buffer.size(), const_cast<char*>("RENEWAL"));
-   }
-   else {
+    if ( AnyCallBackSet() == true ) {
+        PostRenewalJob();
+    }
+    else {
        RequestReceived(Request::RENEWAL);
-   }
-
+    }
 }
 
 /* static */ bool MediaSessionSystem::OnNeedKey(TNvSession appSession, TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype) {
@@ -123,23 +305,25 @@ void MediaSessionSystem::OnRenewal() {
 
     g_lock.Lock();
 
-    ASSERT( g_instance->_applicationSession == appSession );
-    g_instance->OnNeedKey(descramblingSession, keyStatus, content, streamtype); 
+    MediaSessionSystem* session = MediaSessionSystemFromAsmHandle(appSession);
+    if( session != nullptr ) {
+        session->OnNeedKey(descramblingSession, keyStatus, content, streamtype);
+    }
 
     g_lock.Unlock();
 
     return true;
 }
 
-void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus keyStatus,  TNvBuffer* content, TNvStreamType streamtype) {
+void MediaSessionSystem::OnNeedKey(const TNvSession descramblingSession, const TNvKeyStatus keyStatus, const TNvBuffer* content, const TNvStreamType streamtype) {
 
     REPORT_EXT("NagraSystem::OnNeedkey triggered for descrambling session %u", descramblingSession);
 
-    if(content != nullptr) {
-        DumpData("NagraSystem::OnNeedKey", (const uint8_t*)(content->data), content->size);
-    }
+//    if(content != nullptr) {
+//        DumpData("NagraSystem::OnNeedKey", (const uint8_t*)(content->data), content->size);
+//    }
 
-    if ( _callback != nullptr || descramblingSession != 0 ) {
+    if ( AnyCallBackSet() == true || descramblingSession != 0 ) {
 
         // TNvSession deliverysession = OpenKeyNeedSession();
       
@@ -156,26 +340,46 @@ void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus 
 
         if( result == NV_LDS_SUCCESS ) {
 
-            std::vector<uint8_t> buffer(buf.size);
+            DataBuffer buffer(buf.size);
             buf.data = static_cast<void*>(buffer.data());
             buf.size = buffer.size(); // just too make sure...
             result = nvLdsExportMessage(deliverysession, &buf);
             REPORT_LDS(result, "nvLdsExportMessage");
 
             if( result == NV_LDS_SUCCESS ) {
-                DumpData("NagraSystem::OnNeedKey export message", buffer.data(), buffer.size());
+                // DumpData("NagraSystem::OnNeedKey export message", buffer.data(), buffer.size());
 
                 if( descramblingSession == 0 ) {
                     REPORT("NagraSystem::OnNeedkey triggered for system session");
-                    _callback->OnKeyMessage(reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size(), const_cast<char*>("KEYNEEDED"));
+
+                    Addref(); // make sure we keep this alive for the lambda
+                    PostCommandJob([=](const DataBuffer& data){
+                        g_lock.Lock(); // could now better be lock per system
+                        for( auto proxy : _systemproxies ) {
+                            IMediaKeySessionCallback* callback( proxy->IMediaKeyCallback() );
+                            if( callback != nullptr ) {
+                                    callback->OnKeyMessage(reinterpret_cast<const uint8_t*>(data.data()), data.size(), const_cast<char*>("KEYNEEDED"));
+                            }
+                        }
+                        g_lock.Unlock();
+                        Release();
+                    }
+                    , std::move(buffer));
                 }
                 else {
                     REPORT("NagraSystem::OnNeedkey triggered for connect session");
-                    auto it = _connectsessions.find(descramblingSession); 
-                    if( it != _connectsessions.end() ) {
-                        REPORT("NagraSystem::OnNeedkey triggered for connect session, sending...");
-                        it->second->OnKeyMessage(reinterpret_cast<const uint8_t*>(buffer.data()), buffer.size(), const_cast<char*>("KEYNEEDED"));
+
+                    Addref(); // make sure we keep this alive for the lambda
+                    PostCommandJob([=](const DataBuffer& data){
+                        g_lock.Lock(); // could now better be lock per system
+                        auto it = _connectsessions.find(descramblingSession); 
+                        if( it != _connectsessions.end() ) {
+                            it->second->OnKeyMessage(reinterpret_cast<const uint8_t*>(data.data()), data.size(), const_cast<char*>("KEYNEEDED"));
+                        }
+                        g_lock.Unlock();
+                        Release();
                     }
+                    , std::move(buffer));
                 }
             }
         }
@@ -184,7 +388,10 @@ void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus 
 
 /* static */ bool MediaSessionSystem::OnDeliveryCompleted(TNvSession deliverySession) {
 
-    g_lock.Lock();
+// we'll leave this in right now for logging, if we are not going to respond with KeyReady or KeyError we'll remove it
+// See if this is the right callback for that
+
+    g_lock.Lock(); // lock not really needed anymore as we are not doing something usefull with the system
 
     REPORT("MediaSessionSystem::OnDeliveryCompleted");
 
@@ -197,7 +404,7 @@ void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus 
 //    DeliverySessionLookupMap::iterator index (g_DeliverySessionMap.find(deliverySession));
 
 //    if ( index != g_DeliverySessionMap.end() ) {
-//        index->second->OnDeliveryCompleted(deliverySession); 
+//        index->second->OnDeliverySessionCompleted(deliverySession); 
 //    }
 
     g_lock.Unlock();
@@ -205,14 +412,22 @@ void MediaSessionSystem::OnNeedKey(TNvSession descramblingSession, TNvKeyStatus 
     return true;
 }
 
-void MediaSessionSystem::OnDeliverySessionCompleted(TNvSession deliverySession) {
+/*
 
-   if (_callback != nullptr) {
-       _callback->OnKeyReady();
-   }
+// this should be rerouted to the connectsession and also guess also OnKeyError added I guess. Note that the code below does not use the separation by the CommandHanlder, change that before uncommenting
+void MediaSessionSystem::OnDeliverySessionCompleted(const TNvSession deliverySession) {
+
+    for( auto proxy : _systemproxies ) {
+        IMediaKeySessionCallback* callback( proxy->IMediaKeyCallback() );
+        if( callback != nullptr ) {
+                callback->OnKeyReady();
+        }
+    }
 
 //   CloseDeliverySession(deliverySession);
 }
+
+*/
 
 void MediaSessionSystem::GetFilters(FilterStorage& filters) {
     filters.clear();
@@ -221,8 +436,8 @@ void MediaSessionSystem::GetFilters(FilterStorage& filters) {
         uint32_t result = nvImsmGetFilters(_applicationSession, nullptr, &numberOfFilters);
         REPORT_IMSM(result, "nvImsmGetFilters");
         if( result == NV_IMSM_SUCCESS ) {
-            filters.resize(numberOfFilters);
-            result = nvImsmGetFilters(_applicationSession, filters.data(), &numberOfFilters); 
+            filters.resize(numberOfFilters * sizeof(TNvFilter));
+            result = nvImsmGetFilters(_applicationSession, reinterpret_cast<TNvFilter*>(filters.data()), &numberOfFilters); 
             REPORT_IMSM(result, "nvImsmGetFilters");
 
 //            DumpData("NagraSystem::GetFilters", (const uint8_t*)(filters.data()), filters.size());
@@ -234,7 +449,6 @@ void MediaSessionSystem::GetFilters(FilterStorage& filters) {
         }
     }
 }
-
 
 void MediaSessionSystem::GetProvisionChallenge(DataBuffer& buffer) {
     buffer.clear();
@@ -251,7 +465,7 @@ void MediaSessionSystem::GetProvisionChallenge(DataBuffer& buffer) {
         uint32_t result = nvAsmGetProvisioningParameters(_applicationSession, &buf);
         REPORT_ASM(result, "nvAsmGetProvisioningParameters");
 
-        DumpData("System::ProvisioningParameters", buffer.data(), buffer.size());
+        // DumpData("System::ProvisioningParameters", buffer.data(), buffer.size());
 
 
         if( result == NV_ASM_SUCCESS ) {
@@ -275,7 +489,7 @@ void MediaSessionSystem::GetProvisionChallenge(DataBuffer& buffer) {
                   result = nvDpscExportMessage(_provioningSession, &buf);
                   REPORT_DPSC(result, "nvDpscExportMessage");
                   if( result == NV_DPSC_SUCCESS ) {
-                      DumpData("NagraSystem::ProvisioningExportMessage", buffer.data(), buffer.size());
+                      // DumpData("NagraSystem::ProvisioningExportMessage", buffer.data(), buffer.size());
                   }
                   else {
                       buffer.clear();
@@ -286,6 +500,8 @@ void MediaSessionSystem::GetProvisionChallenge(DataBuffer& buffer) {
     }
 }
 
+/*
+
 TNvSession MediaSessionSystem::OpenKeyNeedSession() {
     TNvSession session = OpenDeliverySession();
     if( session != 0 ) {
@@ -294,27 +510,26 @@ TNvSession MediaSessionSystem::OpenKeyNeedSession() {
     return session;
 }
 
+*/
 void MediaSessionSystem::OpenRenewalSession() {
     ASSERT( _renewalSession == 0 );
     _renewalSession = OpenDeliverySession();
 }
 
 TNvSession MediaSessionSystem::OpenDeliverySession() {   
-    // should be in the lock
-
     TNvSession session(0);
     uint32_t result = nvLdsOpen(&session, _applicationSession);
     REPORT_LDS(result,"nvLdsOpen");
     if( result == NV_LDS_SUCCESS ) {
-        g_DeliverySessionMap[session] = this;
+  //      g_DeliverySessionMap[session] = this;
         nvLdsSetOnCompleteListener(session, OnDeliveryCompleted);
     }
     return session;
 }
 
-void MediaSessionSystem::CloseDeliverySession(TNvSession session) {
-    // already in lock
-    
+/*
+void MediaSessionSystem::CloseDeliverySession(const TNvSession session) {
+
     DeliverySessionLookupMap::iterator index (g_DeliverySessionMap.find(session));
 
     if (index != g_DeliverySessionMap.end()) {
@@ -334,6 +549,7 @@ void MediaSessionSystem::CloseDeliverySession(TNvSession session) {
 
     nvLdsClose(session);
 }
+*/
 
 void MediaSessionSystem::CloseProvisioningSession() {
       if(_provioningSession != 0) {
@@ -365,7 +581,7 @@ void MediaSessionSystem::CreateRenewalExchange(DataBuffer& buffer) {
         REPORT_LDS(result, "nvLdsExportMessage");
 
         if( result == NV_LDS_SUCCESS ) {
-            DumpData("NagraSystem::RenewalExportMessage", buffer.data(), buffer.size());
+            // DumpData("NagraSystem::RenewalExportMessage", buffer.data(), buffer.size());
         }
         else {
             buffer.clear();
@@ -378,10 +594,13 @@ void MediaSessionSystem::InitializeWhenProvisoned() {
 
     //protect as much as possible to an unexpected update(provioning) call ;)
 
+    uint32_t result = nvAsmSetContext(_applicationSession, this);
+    REPORT_ASM(result, "nvAsmSetContext");
+
     if( _renewalSession == 0 ) {
         OpenRenewalSession(); //do before callbacks are set, so no need to do this insside the lock
     }
-    uint32_t result = nvAsmSetOnRenewalListener(_applicationSession, OnRenewal);
+    result = nvAsmSetOnRenewalListener(_applicationSession, OnRenewal);
     REPORT_ASM(result, "nvAsmSetOnRenewalListener");
     result = nvAsmSetOnNeedKeyListener(_applicationSession, OnNeedKey);
     REPORT_ASM(result, "nvAsmSetOnNeedKeyListener");
@@ -390,37 +609,60 @@ void MediaSessionSystem::InitializeWhenProvisoned() {
         REPORT_IMSM(result, "nvImsmOpen");
     }
 
-    string asm_licenses_dir("/mnt/flash/nv_tstore/asm_licenses/");
-    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(asm_licenses_dir.c_str()));
-//    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(_licensepath.c_str()));
+    result = nvAsmUseStorage(_applicationSession, const_cast<char *>(_licensepath.c_str()));
     REPORT_ASM(result, "nvAsmUseStorage");
 
     REPORT("enter MediaSessionSystem::MediaSessionSystem");
 }
 
-void MediaSessionSystem::HandleFilters() {
+void MediaSessionSystem::HandleFilters(IMediaKeySessionCallback* callback) {
     REPORT("MediaSessionSystem::Run checking filters");
     FilterStorage filters;
     GetFilters(filters);
+
     REPORT_EXT("MediaSessionSystem::Run %i filter found", filters.size());
     if( filters.size() > 0 ) {
         REPORT("MediaSessionSystem::Run firing filters ");
-        _callback->OnKeyMessage(reinterpret_cast<const uint8_t*>(filters.data()), filters.size()*sizeof(TNvFilter), const_cast<char*>("FILTERS"));
-    }
-    
-}
+        Addref(); // keep session alive for callback
+        PostCommandJob([=](const DataBuffer& data){
+            g_lock.Lock(); // could now better be lock per system
 
-MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, const std::string& operatorvault, const std::string& licensepath)
+            TRACE_L1("Handle filters: in filter callback job, native buffer ptr %p:", data.data());
+
+            if( callback == nullptr ) { //triggered only after Provisioing complete, so now we will sent out the first filter results to all registered callbacks
+                ASSERT( AnyCallBackSet() == true ); //at least one should be set as the Run was already triggered
+                for( auto proxy : _systemproxies ) {
+                    IMediaKeySessionCallback* proxycallback( proxy->IMediaKeyCallback() );
+                    if( proxycallback != nullptr ) {
+                        proxycallback->OnKeyMessage(data.data(), data.size(), const_cast<char*>("FILTERS"));
+                    }
+                }
+            }
+            else { // in this case we already sent the filters to the previous registering callbacks, now only update the new one
+                //as we are doing this on another thread at a later moment let's check if the callback is still registered
+                auto it = std::find_if(_systemproxies.begin(), _systemproxies.end(), [=](const MediaSessionSystemProxy* proxy){ return (proxy == nullptr ? false : proxy->IMediaKeyCallback() == callback); } );
+                if( it != _systemproxies.end()) {
+                    callback->OnKeyMessage(data.data(), data.size(), const_cast<char*>("FILTERS"));
+                }
+            }
+            g_lock.Unlock();
+            Release();
+        }
+        , std::move(filters));
+    }
+ }
+
+MediaSessionSystem::MediaSessionSystem(const uint8_t *data, const uint32_t length, const std::string& operatorvault, const std::string& licensepath)
     : _sessionId(g_NAGRASessionIDPrefix)
-    , _callback(nullptr)
     , _requests(Request::NONE)
     , _applicationSession(0)
     , _inbandSession(0) 
-    , _needKeySessions()
+ //   , _needKeySessions()
     , _renewalSession(0)
     , _provioningSession(0)
     , _connectsessions()
     , _licensepath(licensepath)
+    , _systemproxies()
     , _referenceCount(1) {
 
     REPORT_EXT("operator vault location %s", operatorvault.c_str());
@@ -436,8 +678,7 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
 
     REPORT("date access tested");
 
-    OperatorVault vault("/etc/nagra/op_vault.json");
- //   OperatorVault vault(operatorvault.c_str());
+    OperatorVault vault(operatorvault.c_str());
     string vaultcontent = vault.LoadOperatorVault();
 
     TNvBuffer tmp = { const_cast<char*>(vaultcontent.c_str()), vaultcontent.length() + 1 };
@@ -464,6 +705,8 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, uint32_t length, con
 
 MediaSessionSystem::~MediaSessionSystem() {
 
+    // note: should be in lock
+
     REPORT("enter MediaSessionSystem::~MediaSessionSystem");
 
     // note will correctly handle if InitializeWhenProvisoned() was never called
@@ -472,11 +715,13 @@ MediaSessionSystem::~MediaSessionSystem() {
         nvImsmClose(_inbandSession);
     }
 
-    g_lock.Lock();
-
     CloseProvisioningSession();
 
-    CloseDeliverySession(_renewalSession);
+    nvLdsClose(_renewalSession);
+    _renewalSession = 0;
+
+
+  //  CloseDeliverySession(_renewalSession);
 
  //   for(TNvSession session : _needKeySessions) {
  //       CloseDeliverySession(session);
@@ -484,80 +729,53 @@ MediaSessionSystem::~MediaSessionSystem() {
 
     nvAsmClose(_applicationSession);
 
-    g_instance = nullptr; // we are closing the singleton
-
-    g_lock.Unlock();
+    RemoveMediaSessionInstance(this);
     
- //   ASSERT( _connectsessions.size() == 0 ); //that would be strange if this would not be the case, problem with the refcounting...
-
     REPORT("enter MediaSessionSystem::~MediaSessionSystem");
 
 }
 
 const char *MediaSessionSystem::GetSessionId() const {
-  return _sessionId.c_str();
+  return SessionId().c_str();
 }
 
 const char *MediaSessionSystem::GetKeySystem(void) const {
-  return _sessionId.c_str(); // FIXME : replace with keysystem and test.
+  return SessionId().c_str(); // FIXME : replace with keysystem and test.
 }
 
-void MediaSessionSystem::Run(const IMediaKeySessionCallback* callback) {
+void MediaSessionSystem::Run(IMediaKeySessionCallback& callback) {
 
-  REPORT("MediaSessionSystem::Run");
+    // Already in lock
 
-//  ASSERT ((callback == nullptr) ^ (_callback == nullptr));
+    REPORT("MediaSessionSystem::Run");
 
-  g_lock.Lock();
+    ASSERT(AnyCallBackSet() == true);
 
-  _callback = const_cast<IMediaKeySessionCallback*>(callback);  
-
-  if (_callback != nullptr) {
-        REPORT("MediaSessionSystem::Run callback set");
-
-      if (WasRequestReceived(Request::PROVISION)) {
+    if (WasRequestReceived(Request::PROVISION)) {
         REPORT("MediaSessionSystem::Run firing provisoning ");
-        DataBuffer buffer;
-        GetProvisionChallenge(buffer);
-        _callback->OnKeyMessage(buffer.data(), buffer.size(), const_cast<char*>("PROVISION"));
+
+        // we just post the job without taking into regards the first requester, all registered callbacks at the time the callback is called will be notified
+        PostProvisionJob();
         RequestHandled(Request::PROVISION);
-      } 
-      else {
-          // no provisioning needed, we can already fire the filters now...
-          HandleFilters();
-      }
+    } 
+    else {
+        // no provisioning needed, we can already fire the filters now...
+        HandleFilters(&callback);
+    }
 
-        if (WasRequestReceived(Request::KEYNEEDED)) {
-            REPORT("MediaSessionSystem::Run firing keyneeded ");
-            _callback->OnKeyMessage(nullptr, 0, const_cast<char*>("KEYNEEDED"));
-            RequestHandled(Request::KEYNEEDED);
+    if (WasRequestReceived(Request::RENEWAL)) {
+        REPORT("MediaSessionSystem::Run firing renewal ");
 
-        }
-        if (WasRequestReceived(Request::RENEWAL)) {
-            REPORT("MediaSessionSystem::Run firing renewal ");
-            DataBuffer buffer;
-            CreateRenewalExchange(buffer);
-            _callback->OnKeyMessage(buffer.data(), buffer.size(), const_cast<char*>("RENEWAL"));
-            RequestHandled(Request::RENEWAL);
-      }
+        // we just post the job without taking into regards the first requester, all registered callbacks at the time the callback is called will be notified
+        PostRenewalJob();
+        RequestHandled(Request::RENEWAL);
+    }
 
-  }
-
-  g_lock.Unlock();
 }
 
 void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
 
-        REPORT("enter MediaSessionSystem::Update");
-
-    REPORT_EXT("going to test data access %u", length);
-
-    if(length > 0) {
-        uint8_t v = data[length-1];
-    }
-
-    REPORT("date access tested");
-
+    REPORT("enter MediaSessionSystem::Update");
 
     WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
     WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
@@ -582,7 +800,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
             ASSERT( reader.HasData() == true );
             string response = reader.Text();
             TNvBuffer buf = { const_cast<char*>(response.c_str()), response.length() + 1 }; 
-            DumpData("NagraSystem::RenewalResponse|Keyneeded", (const uint8_t*)buf.data, buf.size);
+            // DumpData("NagraSystem::RenewalResponse|Keyneeded", (const uint8_t*)buf.data, buf.size);
             uint32_t result = nvLdsImportMessage(_renewalSession, &buf); 
             REPORT_LDS(result, "nvLdsImportMessage");
             break;
@@ -595,7 +813,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
             const uint8_t* pbuffer;
             buf.size = reader.LockBuffer<uint16_t>(pbuffer);
             buf.data = const_cast<uint8_t*>(pbuffer);
-            DumpData("NagraSystem::EMMResponse", (const uint8_t*)buf.data, buf.size);
+            // DumpData("NagraSystem::EMMResponse", (const uint8_t*)buf.data, buf.size);
             uint32_t result = nvImsmDecryptEMM(_inbandSession, &buf); 
             REPORT_IMSM(result, "nvImsmDecryptEMM");
             reader.UnlockBuffer(buf.size);
@@ -607,13 +825,15 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
             ASSERT( reader.HasData() == true );
             string response = reader.Text();
             TNvBuffer buf = { const_cast<char*>(response.c_str()), response.length() + 1 }; 
-            DumpData("NagraSystem::ProvisionResponse", (const uint8_t*)buf.data, buf.size);
+            //DumpData("NagraSystem::ProvisionResponse", (const uint8_t*)buf.data, buf.size);
             uint32_t result = nvDpscImportMessage(_provioningSession, &buf);
             REPORT_DPSC(result, "nvDpscImportMessage");
             CloseProvisioningSession();
             InitializeWhenProvisoned();
             // handle the filters as that was postponed untill provisioning was complete...
-            HandleFilters();
+            g_lock.Lock();           
+            HandleFilters(nullptr);
+            g_lock.Unlock();           
             break;
         }
         default: /* WTF */
@@ -626,7 +846,7 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
     else {
        REPORT("MediaSessionSystem::Update: expected more data");
     }
-        REPORT("leave MediaSessionSystem::Update");
+    REPORT("leave MediaSessionSystem::Update");
 }
 
 CDMi_RESULT MediaSessionSystem::Load() {
@@ -674,7 +894,7 @@ CDMi_RESULT MediaSessionSystem::ReleaseClearContent(const uint8_t*, uint32_t, co
     TNvSession descramblingsession = 0;
     int platStatus;
 
-    g_lock.Lock(); // note: use same lock as registered callbacks!
+    g_lock.Lock(); // note:we could use a more find grained locking to only protect the _connectsessions
 
     platStatus = nagra_cma_platf_dsm_open(TSID);
     REPORT_PRM_EXT(NAGRA_CMA_PLATF_OK, platStatus,
@@ -695,7 +915,7 @@ CDMi_RESULT MediaSessionSystem::ReleaseClearContent(const uint8_t*, uint32_t, co
 void MediaSessionSystem::CloseDescramblingSession(TNvSession session, const uint32_t TSID) {
      REPORT("enter MediaSessionSystem::UnregisterConnectSessionS");
 
-    g_lock.Lock(); // note: use same lock as registered callbacks!
+    g_lock.Lock(); // note:we could use a more find grained locking to only protect the _connectsessions
 
     auto it = _connectsessions.find(session);
     ASSERT( it != _connectsessions.end() );
@@ -737,20 +957,120 @@ uint32_t MediaSessionSystem::Release() const {
 
     uint32_t retval = WPEFramework::Core::ERROR_NONE;
 
-     REPORT_EXT("MediaSessionSystem::Release %u", _referenceCount);
-
     if (WPEFramework::Core::InterlockedDecrement(_referenceCount) == 0) {
         delete this;
-     REPORT("leave MediaSessionSystem::Release deleted");
+        REPORT("MediaSessionSystem::Release deleted");
 
         uint32_t retval = WPEFramework::Core::ERROR_DESTRUCTION_SUCCEEDED;
     }
 
     g_lock.Unlock();
 
-     REPORT("leave MediaSessionSystem::Release  not deleted");
+     REPORT("leave MediaSessionSystem::Release");
     return retval;
+}
+
+void MediaSessionSystem::RegisterMediaSessionSystemProxy(MediaSessionSystemProxy* proxy) {
+    ASSERT(proxy != nullptr);
+    g_lock.Lock(); // note:we could use a more find grained locking to only protect the _systemproxies but would not make that big of a differce as you need g_lock anyway when creating a poxy
+
+    _systemproxies.push_front(proxy); 
+
+    g_lock.Unlock(); 
+}
+
+void MediaSessionSystem::DeregisterMediaSessionSystemProxy(MediaSessionSystemProxy* proxy) {
+    ASSERT(proxy != nullptr);
+    g_lock.Lock(); 
+
+    _systemproxies.remove( proxy ); 
+
+    g_lock.Unlock(); 
+
+}
+
+void MediaSessionSystem::PostProvisionJob() {
+    DataBuffer buffer;
+    GetProvisionChallenge(buffer);
+    Addref(); // make sure we keep this alive for the lambda
+    PostCommandJob([=](const DataBuffer& data){
+        g_lock.Lock(); // could now better be lock per system
+        for( auto proxy : _systemproxies ) {
+            IMediaKeySessionCallback* callback( proxy->IMediaKeyCallback() );
+            if( callback != nullptr ) {
+                callback->OnKeyMessage(data.data(), data.size(), const_cast<char*>("PROVISION"));
+            }
+        }
+        g_lock.Unlock();
+        Release();
+    }
+    , std::move(buffer));
+}
+
+void MediaSessionSystem::PostRenewalJob() {
+    DataBuffer buffer;
+    CreateRenewalExchange(buffer);
+    Addref(); // make sure we keep this alive for the lambda
+    PostCommandJob([=](const DataBuffer& data){
+        g_lock.Lock(); // could now better be lock per system
+        for( auto proxy : _systemproxies ) {
+            IMediaKeySessionCallback* callback( proxy->IMediaKeyCallback() );
+            if( callback != nullptr ) {
+                callback->OnKeyMessage(data.data(), data.size(), const_cast<char*>("RENEWAL"));
+            }
+        }
+        g_lock.Unlock();
+        Release();
+    }
+    , std::move(buffer));
 }
 
 
 }  // namespace CDMi
+
+// ---------------------------------------------------
+// CommandHandler 
+// ---------------------------------------------------
+
+namespace {
+
+    CommandHandler::CommandHandler()
+        : WPEFramework::Core::Thread(WPEFramework::Core::Thread::DefaultStackSize(), "Nagra DRM Session Commandhandler")
+        , _commands()
+        ,_lock() {
+    }
+
+    CommandHandler::~CommandHandler() {
+       Stop();
+            
+        Wait(Thread::STOPPED,  WPEFramework::Core::infinite);
+    }
+
+    void CommandHandler::PostCommand(Command&& command, Data&& data) {
+        _lock.Lock();           
+        _commands.push(CommandPair(std::move(command), std::move(data)));
+        if( _commands.size() == 1 ) {
+            Run();
+        }
+        _lock.Unlock();
+    }
+
+    uint32_t CommandHandler::Worker() {
+        while( IsRunning() == true ) {
+            _lock.Lock();
+            if( CommandVailable() == true) {
+                Data data(std::move(std::get<1>(_commands.front())));
+                Command command(std::move(std::get<0>(_commands.front())));
+                _commands.pop();
+                _lock.Unlock();
+
+                command(data.DataBuffer());
+            }
+            else {
+                Block(); //needs to be in lock to prevent racecondition with Run()  
+                _lock.Unlock();
+            }
+        }
+        return WPEFramework::Core::infinite;
+    }
+}

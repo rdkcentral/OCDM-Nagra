@@ -3,7 +3,8 @@ project(DRMNagraSystem)
 set(DRM_PLUGIN_SOURCES 
     MediaSessionSystem.cpp 
     MediaSystem.cpp
-    OperatorVault.cpp)
+    OperatorVault.cpp
+    ../ParsePSSHHeader.cpp)
 
 find_package(Nagra REQUIRED)
 

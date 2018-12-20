@@ -14,12 +14,10 @@
  * limitations under the License.
  */
 
-#include <core/core.h>
-
 #include "MediaSessionConnect.h"
 
 #include "../Report.h"
-
+#include "../ParsePSSHHeader.h"
 #include "../MediaRequest.h"
 
 namespace {
@@ -30,159 +28,102 @@ class MediaSystemLoader {
         : _SessionSystem(nullptr)
         , _syslib("DRMNagraSystem.drm") {
 
-        REPORT("NagraConnect going to look for NagraSsystem access entry");
-
         if (_syslib.IsLoaded() == true) {
-            REPORT("NagraConnect going to look for NagraSsystem access entry : lib was loaded");
-            _SessionSystem = reinterpret_cast<CDMi::IMediaSessionSystem*(*)()>(_syslib.LoadFunction(_T("GetMediaSessionSystemInterface")));
-            REPORT_EXT("NagraConnect going to look for NagraSsystem access entry result = %u", _SessionSystem);
+            _SessionSystem = reinterpret_cast<CDMi::IMediaSessionSystem*(*)(const char*)>(_syslib.LoadFunction(_T("GetMediaSessionSystemInterface")));
         }
         else {
             REPORT("NagraConnect going to look for NagraSsystem access entry : lib was NOT loaded");
         }
   }
 
-  CDMi::IMediaSessionSystem* SessionSystem() {
+  CDMi::IMediaSessionSystem* SessionSystem(const char* systemsessionid) {
       CDMi::IMediaSessionSystem* retval(nullptr);
 
       if( _SessionSystem != nullptr ) {
-          retval = _SessionSystem();
+          retval = _SessionSystem(systemsessionid);
       }
       return retval;
   }
 
   private:
     WPEFramework::Core::Library _syslib;
-    CDMi::IMediaSessionSystem* (*_SessionSystem)();
+    CDMi::IMediaSessionSystem* (*_SessionSystem)(const char* systemsessionid);
 };
 
-CDMi::IMediaSessionSystem* SessionSystem() {
+CDMi::IMediaSessionSystem* SessionSystem(const char* systemsessionid) {
   static MediaSystemLoader loader;
-  return loader.SessionSystem();
+  return loader.SessionSystem(systemsessionid);
 }
 
 }
 
 namespace CDMi {
 
-const uint8_t MediaSessionConnect::CommonEncryption[] = { 0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4d, 0x02, 0xac, 0xe3, 0x3c, 0x1e, 0x52, 0xe2, 0xfb, 0x4b };
-
-
 MediaSessionConnect::MediaSessionConnect(const uint8_t *data, uint32_t length)
     : _sessionId(g_NAGRASessionIDPrefix)
     , _callback(nullptr)
     , _descramblingSession(0)
     , _TSID(0)
-    , _systemsession(nullptr) {
+    , _systemsession(nullptr)
+    , _lock() {
 
     REPORT("enter MediaSessionConnect::MediaSessionConnect"); 
 
-    ::ThreadId tid =  WPEFramework::Core::Thread::ThreadId();
-    REPORT_EXT("MediaSessionConnect threadid = %u", tid);
+    // DumpData("MediaSessionConnect::MediaSessionConnect", data, length);
 
-    DumpData("MediaSessionConnect::MediaSessionConnect", data, length);
+    uint16_t Emi = 0;
 
-    REPORT_EXT("going to test data access %u", length);
+    REPORT("parsing pssh header");
 
-    REPORT("date access tested");
+    // parse pssh header
+    std::string systemsessionid;
+    const uint8_t *privatedata = data;
+    int32_t result = FindPSSHHeaderPrivateData(privatedata, length);
 
-    if( length >= 4 ) {
-        WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
+    if( result > 0 ) {
+        WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(privatedata), result, result);
         WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
 
-        uint16_t Emi = 0;
+        constexpr uint8_t privatedatapart1size = sizeof(uint32_t) + sizeof(uint16_t);
 
-        REPORT("parsing pssh header");
-
-        // parse pssh header
-        int32_t error = -1; //not enough data
-        uint32_t remainingsize = reader.Number<uint32_t>();
-        REPORT_EXT("Found %u bytes of pssh header data", remainingsize);
-        ASSERT(remainingsize >= 4); 
-        remainingsize -= 4;
-
-        if( remainingsize >= 4 ) {
-            REPORT("parsing pssh id");
-            uint32_t psshident = reader.Number<uint32_t>();
-            error = psshident == 0x70737368 ? error : -2;   
-            remainingsize -= 4;     
-
-            if ( error == -1 && remainingsize >= 4 ) {
-                REPORT("parsing pssh header");
-                uint32_t header = reader.Number<uint32_t>();
-                remainingsize -= 4;     
-                constexpr uint16_t buffersize = 16;
-
-                if ( remainingsize >= buffersize ) {
-                    REPORT("parsing pssh systemid");
-                    uint8_t buffer[buffersize];
-                    reader.Copy(buffersize, buffer);
-                    error = ( memcmp (buffer, CommonEncryption, buffersize)  == 0 ) ? error : -3;
-                    remainingsize -= buffersize;     
-
-                    if ( error == -1 && remainingsize >= 4 ) {
-                        REPORT("parsing pssh kids");
-
-                        const uint8_t* buffer = nullptr;
-                        uint32_t KIDcount = reader.LockBuffer<uint32_t>(buffer);
-                        remainingsize -= 4;
-                        
-                        //for now we are not interested in the KIDs
-                        REPORT_EXT("Found %u of KIDs", KIDcount);
-                        if( remainingsize >= ( KIDcount * 16 ) ) {
-                            reader.UnlockBuffer(KIDcount * 16);    
-                            remainingsize -= ( KIDcount * buffersize );
-
-                            //now we got to the private data we are looking for...
-                            if( remainingsize >= 4 ) {
-                                REPORT("parsing pssh private data length");
-                                uint32_t datalength = reader.Number<uint32_t>();
-                                REPORT_EXT("Found %u bytes of private data", datalength);
-                                remainingsize -= 4;
-
-                                if( datalength >= 6 && remainingsize >= 6 ) {
-                                  REPORT("parsing pssh private data");
-                                  _TSID = reader.Number<uint32_t>();
-                                  Emi = reader.Number<uint16_t>();
-                                  error = 0;
-                                }
-                            }
-                        }
-                    }
-                }
+        if( result >= privatedatapart1size ) {
+            REPORT("parsing pssh private data part1");
+            _TSID = reader.Number<uint32_t>();
+            Emi = reader.Number<uint16_t>();
+            if( result > privatedatapart1size ) {
+                systemsessionid = std::string(reinterpret_cast<const char*>(&(privatedata[privatedatapart1size])), result-privatedatapart1size);   
             }
         }
 
-        REPORT_EXT("Read pssh header, result: %i", error);
-
-        _systemsession =  SessionSystem();
-       ASSERT( _systemsession != nullptr );
-
-       if( _systemsession != nullptr ) {
-
-         REPORT_EXT("ConnectSession TSID used; %u", _TSID);
-         REPORT_EXT("ConnectSession Emi used; %u", Emi);
-
-          _descramblingSession = _systemsession->OpenDescramblingSession(this, _TSID, Emi);
-
-          _sessionId += std::to_string(_descramblingSession);
-
-            if( _descramblingSession == 0 ) {
-                REPORT("Failed to create descrambling sesssion");
-           }
-           else {
-                REPORT_EXT("MediaSessionConnect created descrambling sesssion succesfully %u", _descramblingSession);
-           }
-      }
-      else {
-        REPORT("Could not get MediaSessionSystem from ConnectSession. ConnectSession cannot be used without an active SystemSession");
-      }
-
     }
     else {
-      REPORT("Could not initialize MediaSessionConnect, incorrect initialization data length");
+        REPORT_EXT("incorrect pssh header or no private data: %i", result);
     }
-        REPORT("leave MediaSessionConnect::MediaSessionConnect");
+     
+    _systemsession =  SessionSystem(systemsessionid.empty() ? nullptr : systemsessionid.c_str());
+    ASSERT( _systemsession != nullptr );
+
+      if( _systemsession != nullptr ) {
+
+        REPORT_EXT("ConnectSession TSID used; %u", _TSID);
+        REPORT_EXT("ConnectSession Emi used; %u", Emi);
+
+        _descramblingSession = _systemsession->OpenDescramblingSession(this, _TSID, Emi);
+
+        _sessionId += std::to_string(_descramblingSession);
+
+          if( _descramblingSession == 0 ) {
+              REPORT("Failed to create descrambling sesssion");
+          }
+          else {
+              REPORT_EXT("MediaSessionConnect created descrambling sesssion succesfully %u", _descramblingSession);
+          }
+    }
+    else {
+      REPORT("Could not get MediaSessionSystem from ConnectSession. ConnectSession cannot be used without an active SystemSession");
+    }
+
+    REPORT("leave MediaSessionConnect::MediaSessionConnect");
 }
 
 MediaSessionConnect::~MediaSessionConnect() {
@@ -191,10 +132,7 @@ MediaSessionConnect::~MediaSessionConnect() {
 
     if( _systemsession != nullptr ) {
 
-      REPORT("MediaSessionConnect::~MediaSessionConnect cleaning up");
         if ( _descramblingSession != 0 ) {
-          REPORT("MediaSessionConnect::~MediaSessionConnect closing session");
-
           _systemsession->CloseDescramblingSession(_descramblingSession, _TSID);
         }
 
@@ -214,18 +152,17 @@ const char *MediaSessionConnect::GetKeySystem(void) const {
 
 void MediaSessionConnect::Run(const IMediaKeySessionCallback* callback) {
 
-  ASSERT ((callback == nullptr) ^ (_callback == nullptr));
+    ASSERT ((callback == nullptr) ^ (_callback == nullptr));
 
-  _callback = const_cast<IMediaKeySessionCallback*>(callback);  
+    _lock.Lock();
+
+    _callback = const_cast<IMediaKeySessionCallback*>(callback);  
+
+   _lock.Unlock();
 }
 
 void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
-        REPORT("enter MediaSessionConnect::Update");
-
-    REPORT_EXT("going to test data access %u", length);
-
-    REPORT("date access tested");
-
+    REPORT("enter MediaSessionConnect::Update");
 
     WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
     WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
@@ -243,12 +180,12 @@ void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
         case Request::ECMDELIVERY:
         {
             REPORT("NagraSytem importing ECM response");
-            assert( reader.HasData() == true );
+            ASSERT( reader.HasData() == true );
             TNvBuffer buf = { nullptr, 0 }; 
             const uint8_t* pbuffer;
             buf.size = reader.LockBuffer<uint16_t>(pbuffer);
             buf.data = const_cast<uint8_t*>(pbuffer);
-            DumpData("NagraSystem::ECMResponse", (const uint8_t*)buf.data, buf.size);
+            // DumpData("NagraSystem::ECMResponse", (const uint8_t*)buf.data, buf.size);
             if( _systemsession != nullptr ) {
                 _systemsession->SetPrmContentMetadata(_descramblingSession, &buf, ::NV_STREAM_TYPE_DVB);
             }
@@ -261,12 +198,12 @@ void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
         case Request::PLATFORMDELIVERY:
         {
             REPORT("NagraSytem importing PLATFORM Delivery");
-            assert( reader.HasData() == true );
+            ASSERT( reader.HasData() == true );
             const uint8_t * pbuffer;
             size_t size = reader.LockBuffer<uint16_t>(pbuffer);
             uint8_t *data = const_cast<uint8_t *>(pbuffer);
-            DumpData("NagraSystem::PLATFORMDelivery",
-                     (const uint8_t*) data, size);
+           /* DumpData("NagraSystem::PLATFORMDelivery",
+                     (const uint8_t*) data, size); */
             if( _systemsession != nullptr ) {
                 _systemsession->SetPlatformMetadata(_descramblingSession, _TSID,
                                                     data, size);
@@ -279,9 +216,6 @@ void MediaSessionConnect::Update(const uint8_t *data, uint32_t length) {
         }
         default: /* WTF */
             break;
-        }
-        if( reader.HasData() ) {
-        REPORT("MediaSessionConnect::Update: more data than expected");
         }
     }
     else {
@@ -316,7 +250,6 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
     const uint8_t /* keyIdLength */,
     const uint8_t* /* keyId */)
 {
-  // System sessions should *NOT* be used for decrypting !!!!
   ASSERT(false);
 
   return CDMi_S_FALSE;
@@ -324,7 +257,6 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
 
 CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, const uint32_t, uint8_t*) {
 
-  // System sessions should *NOT* be used for decrypting !!!!
   ASSERT(false);
 
   return CDMi_S_FALSE;
@@ -332,10 +264,15 @@ CDMi_RESULT MediaSessionConnect::ReleaseClearContent(const uint8_t*, uint32_t, c
 
 void MediaSessionConnect::OnKeyMessage(const uint8_t *f_pbKeyMessage, const uint32_t f_cbKeyMessage, const char *f_pszUrl)  {
     REPORT("MediaSessionConnect::OnKeyMessage triggered...");
+
+    _lock.Lock();
+
     if( _callback != nullptr ) {
-        REPORT("MediaSessionConnect::OnKeyMessage sending...");
         _callback->OnKeyMessage(f_pbKeyMessage, f_cbKeyMessage, const_cast<char*>(f_pszUrl));
     }
+
+    _lock.Unlock();
+
 }
 
 
