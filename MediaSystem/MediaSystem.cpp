@@ -107,7 +107,7 @@ public:
     }
 
     CDMi_RESULT CreateMediaKeySession(
-        const std::string& keySystem
+        const std::string& keySystem,
         int32_t licenseType,
         const char *f_pwszInitDataType,
         const uint8_t *f_pbInitData,
