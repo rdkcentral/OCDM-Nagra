@@ -248,7 +248,8 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
     uint32_t *f_pcbOpaqueClearContent,
     uint8_t **f_ppbOpaqueClearContent,
     const uint8_t /* keyIdLength */,
-    const uint8_t* /* keyId */)
+    const uint8_t* /* keyId */,
+    bool /* initWithLast15 */)
 {
   ASSERT(false);
 

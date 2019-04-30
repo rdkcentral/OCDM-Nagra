@@ -104,9 +104,10 @@ private:
             uint32_t *f_pcbOpaqueClearContent,
             uint8_t **f_ppbOpaqueClearContent,
             const uint8_t keyIdLength,
-            const uint8_t* keyId) override {
+            const uint8_t* keyId,
+            bool initWithLast15) override {
                 return _system.Decrypt(f_pbSessionKey, f_cbSessionKey, f_pdwSubSampleMapping, f_cdwSubSampleMapping, f_pbIV, f_cbIV, 
-                                        f_pbData, f_cbData, f_pcbOpaqueClearContent, f_ppbOpaqueClearContent, keyIdLength, keyId);
+                                        f_pbData, f_cbData, f_pcbOpaqueClearContent, f_ppbOpaqueClearContent, keyIdLength, keyId, initWithLast15);
             }
 
         CDMi_RESULT ReleaseClearContent(
@@ -120,6 +121,8 @@ private:
         const std::string& SessionID() const {
             return _sessionid;
         }
+
+        void UninitializeContext() {}
 
     private:
         MediaSessionSystem& _system;
@@ -160,12 +163,14 @@ public:
         uint32_t *f_pcbOpaqueClearContent,
         uint8_t **f_ppbOpaqueClearContent,
         const uint8_t keyIdLength,
-        const uint8_t* keyId);
+        const uint8_t* keyId,
+        bool initWithLast15);
     virtual CDMi_RESULT ReleaseClearContent(
         const uint8_t *f_pbSessionKey,
         uint32_t f_cbSessionKey,
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
+    virtual void UninitializeContext() {}
 
     // IMediaSessionSystem overrides
     TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) override;

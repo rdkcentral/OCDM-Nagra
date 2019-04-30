@@ -107,6 +107,7 @@ public:
     }
 
     CDMi_RESULT CreateMediaKeySession(
+        const std::string& keySystem
         int32_t licenseType,
         const char *f_pwszInitDataType,
         const uint8_t *f_pbInitData,
@@ -137,6 +138,7 @@ public:
 static SystemFactoryType<NagraSystem> g_instanceSystem({"video/x-h264", "audio/mpeg"});
 
 CDMi_RESULT NagraSystem::CreateMediaKeySession(
+    const std::string& /* keySystem */,
     int32_t licenseType,
     const char *f_pwszInitDataType,
     const uint8_t *f_pbInitData,
