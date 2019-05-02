@@ -67,7 +67,6 @@ public:
         uint32_t f_cbSessionKey,
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
-    void MediaKeySession::UninitializeContext() {}
 
     // Note: the KeyUsable (and other) events are currently not (yet) triggered as it is not required by the current nagra client. 
     //       In the future (e.g. before connect it to the WPEWebkit) this should be connected to the appicable Nagra callback (we are not sure

@@ -122,8 +122,6 @@ private:
             return _sessionid;
         }
 
-        void UninitializeContext() {}
-
     private:
         MediaSessionSystem& _system;
         IMediaKeySessionCallback *_callback;
@@ -170,7 +168,6 @@ public:
         uint32_t f_cbSessionKey,
         const uint32_t  f_cbClearContentOpaque,
         uint8_t  *f_pbClearContentOpaque );
-    virtual void UninitializeContext() {}
 
     // IMediaSessionSystem overrides
     TNvSession OpenDescramblingSession(IMediaSessionConnect* session, const uint32_t TSID, const uint16_t Emi) override;
