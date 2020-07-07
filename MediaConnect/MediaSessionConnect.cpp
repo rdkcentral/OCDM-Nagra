@@ -25,8 +25,8 @@ namespace {
 class MediaSystemLoader {
     public:
     MediaSystemLoader() 
-        : _SessionSystem(nullptr)
-        , _syslib("DRMNagraSystem.drm") {
+        : _syslib("DRMNagraSystem.drm")
+        , _SessionSystem(nullptr) {
 
         if (_syslib.IsLoaded() == true) {
             _SessionSystem = reinterpret_cast<CDMi::IMediaSessionSystem*(*)(const char*)>(_syslib.LoadFunction(_T("GetMediaSessionSystemInterface")));
