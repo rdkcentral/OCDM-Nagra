@@ -20,6 +20,8 @@
 #include <core/core.h>
 #include "../Report.h"
 
+using namespace WPEFramework;
+
 namespace CDMi {
 
 namespace {
