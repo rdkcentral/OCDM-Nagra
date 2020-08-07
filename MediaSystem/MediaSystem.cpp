@@ -20,6 +20,8 @@
 #include <core/core.h>
 #include "../Report.h"
 
+using namespace WPEFramework;
+
 namespace CDMi {
 
 namespace {
@@ -99,7 +101,7 @@ public:
     ~NagraSystem() {
     }
 
-   void OnSystemConfigurationAvailable(const std::string& configline) {
+   void Initialize(PluginHost::IShell* /* shell */,  const std::string& configline) {
         Config config; 
         config.FromString(configline);
         _operatorvaultpath = config.OperatorVaultPath.Value();
