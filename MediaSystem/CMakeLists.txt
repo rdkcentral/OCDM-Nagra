@@ -17,21 +17,33 @@
 
 project(DRMNagraSystem)
 
-set(DRM_PLUGIN_SOURCES 
-    MediaSessionSystem.cpp 
+find_package(Nagra REQUIRED)
+
+set(MODULE_NAME NagraSystem)
+
+# add the library
+add_library(${MODULE_NAME} SHARED
+    MediaSessionSystem.cpp
     MediaSystem.cpp
     OperatorVault.cpp
     ../ParsePSSHHeader.cpp)
 
-find_package(Nagra REQUIRED)
+set_target_properties(${MODULE_NAME} PROPERTIES
+        CXX_STANDARD 11
+        CXX_STANDARD_REQUIRED YES)
 
-include_directories(${NAGRA_INCLUDE_DIRS})
+target_include_directories(${MODULE_NAME}
+    PRIVATE
+    "${CMAKE_SYSROOT}/usr/include"
+    "${CMAKE_SYSROOT}/usr/include/${NAMESPACE}"
+    ${NAGRA_INCLUDE_DIRS})
 
-# add the library
-add_library(${PROJECT_NAME} SHARED ${DRM_PLUGIN_SOURCES})
-target_link_libraries(${PROJECT_NAME} ${NAGRA_LIBRARIES} ${CORE_LIBRARIES})
-add_compiler_flags(${PROJECT_NAME} "${CORE_DEFINITIONS}")
-set_target_properties(${PROJECT_NAME} PROPERTIES SUFFIX ".drm")
-set_target_properties(${PROJECT_NAME} PROPERTIES PREFIX "")
+target_link_libraries(${MODULE_NAME}
+    ${NAGRA_LIBRARIES}
+    ${NAMESPACE}Core::${NAMESPACE}Core)
 
-install(TARGETS ${PROJECT_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/${NAMESPACE}/OCDM)
+add_compiler_flags(${MODULE_NAME} "${CORE_DEFINITIONS}")
+set_target_properties(${MODULE_NAME} PROPERTIES SUFFIX ".drm")
+set_target_properties(${MODULE_NAME} PROPERTIES PREFIX "")
+
+install(TARGETS ${MODULE_NAME} DESTINATION ${CMAKE_INSTALL_PREFIX}/share/${NAMESPACE}/OCDM)

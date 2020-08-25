@@ -15,15 +15,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-cmake_minimum_required(VERSION 2.8)
+cmake_minimum_required(VERSION 3.3)
+project(DRMNagra)
 
-include(${CMAKE_SYSROOT}${CMAKE_INSTALL_PREFIX}/include/cmake/WPEFramework.cmake)
+find_package(WPEFramework)
+
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/")
 
-find_package(Core REQUIRED)
-find_package(Interfaces REQUIRED)
-
-include_directories(${CORE_INCLUDE_DIR} ${INTERFACES_INCLUDE_DIR})
+find_package(${NAMESPACE}Core REQUIRED)
 
 add_subdirectory(MediaSystem)
 add_subdirectory(MediaConnect)
