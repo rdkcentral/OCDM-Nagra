@@ -243,7 +243,7 @@ CDMi_RESULT MediaSessionConnect::Decrypt(
     uint32_t f_cdwSubSampleMapping,
     const uint8_t *f_pbIV,
     uint32_t f_cbIV,
-    const uint8_t *payloadData,
+    uint8_t *payloadData,
     uint32_t payloadDataSize,
     uint32_t *f_pcbOpaqueClearContent,
     uint8_t **f_ppbOpaqueClearContent,
