@@ -24,8 +24,8 @@ constexpr uint8_t CommonEncryption[] = { 0x10, 0x77, 0xef, 0xec, 0xc0, 0xb2, 0x4
 
 int32_t CDMi::FindPSSHHeaderPrivateData(const uint8_t*& data, const uint32_t length) {
 
-    WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
-    WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
+    Thunder::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
+    Thunder::Core::FrameType<0>::Reader reader(frame, 0);
 
     // parse pssh header
     int32_t result = -1; //not enough data

@@ -32,7 +32,7 @@ public:
     string LoadOperatorVault() const;
 
 private:
-  WPEFramework::Core::DataElementFile _file;
+  Thunder::Core::DataElementFile _file;
 };
 
 } // namespace CDMi
