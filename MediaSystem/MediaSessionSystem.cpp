@@ -31,7 +31,7 @@
 
 namespace {
 
-    WPEFramework::Core::CriticalSection g_lock;
+    Thunder::Core::CriticalSection g_lock;
 /*
     Noit needed for now as we do not send a OnKeyReady message
 
@@ -58,7 +58,7 @@ namespace {
 
     // we of course don't want to create a thread per system so we only have one...
 
-    class CommandHandler : virtual public WPEFramework::Core::Thread {
+    class CommandHandler : virtual public Thunder::Core::Thread {
     public:
         CommandHandler();
         ~CommandHandler();
@@ -110,7 +110,7 @@ namespace {
         using CommandPair = std::pair<Command, Data>;
         using CommandsContainer = std::queue< CommandPair >;
         CommandsContainer _commands;
-        WPEFramework::Core::CriticalSection _lock;
+        Thunder::Core::CriticalSection _lock;
     };
 
     void PostCommandJob(CommandHandler::Command&& command, CDMi::MediaSessionSystem::DataBuffer&& data) { // this makes sure we do not start the thread before it is actually needed, not just when the drm is loaded
@@ -670,7 +670,7 @@ MediaSessionSystem::MediaSessionSystem(const uint8_t *data, const uint32_t lengt
 
     REPORT("enter MediaSessionSystem::MediaSessionSystem");
 
-    ::ThreadId tid =  WPEFramework::Core::Thread::ThreadId();
+    ::ThreadId tid =  Thunder::Core::Thread::ThreadId();
     REPORT_EXT("MediaSessionSystem threadid = %u", tid);
 
 
@@ -777,8 +777,8 @@ void MediaSessionSystem::Update(const uint8_t *data, uint32_t  length) {
 
     REPORT("enter MediaSessionSystem::Update");
 
-    WPEFramework::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
-    WPEFramework::Core::FrameType<0>::Reader reader(frame, 0);
+    Thunder::Core::FrameType<0> frame(const_cast<uint8_t *>(data), length, length);
+    Thunder::Core::FrameType<0>::Reader reader(frame, 0);
 
     REPORT("NagraSytem update triggered");
 
@@ -948,7 +948,7 @@ void MediaSessionSystem::SetPlatformMetadata(TNvSession descamblingsession, cons
 }
 
 void MediaSessionSystem::Addref() const {
-     WPEFramework::Core::InterlockedIncrement(_referenceCount);
+     Thunder::Core::InterlockedIncrement(_referenceCount);
 }
 
 uint32_t MediaSessionSystem::Release() const {
@@ -956,13 +956,13 @@ uint32_t MediaSessionSystem::Release() const {
 
     g_lock.Lock(); // need lock here as wel as in CreateMediaSessionSystem(), as the final release can come from external as well as from the connect session
 
-    uint32_t retval = WPEFramework::Core::ERROR_NONE;
+    uint32_t retval = Thunder::Core::ERROR_NONE;
 
-    if (WPEFramework::Core::InterlockedDecrement(_referenceCount) == 0) {
+    if (Thunder::Core::InterlockedDecrement(_referenceCount) == 0) {
         delete this;
         REPORT("MediaSessionSystem::Release deleted");
 
-        uint32_t retval = WPEFramework::Core::ERROR_DESTRUCTION_SUCCEEDED;
+        uint32_t retval = Thunder::Core::ERROR_DESTRUCTION_SUCCEEDED;
     }
 
     g_lock.Unlock();
@@ -1036,7 +1036,7 @@ void MediaSessionSystem::PostRenewalJob() {
 namespace {
 
     CommandHandler::CommandHandler()
-        : WPEFramework::Core::Thread(WPEFramework::Core::Thread::DefaultStackSize(), "Nagra DRM Session Commandhandler")
+        : Thunder::Core::Thread(Thunder::Core::Thread::DefaultStackSize(), "Nagra DRM Session Commandhandler")
         , _commands()
         ,_lock() {
     }
@@ -1044,7 +1044,7 @@ namespace {
     CommandHandler::~CommandHandler() {
        Stop();
             
-        Wait(Thread::STOPPED,  WPEFramework::Core::infinite);
+        Wait(Thread::STOPPED,  Thunder::Core::infinite);
     }
 
     void CommandHandler::PostCommand(Command&& command, Data&& data) {
@@ -1072,6 +1072,6 @@ namespace {
                 _lock.Unlock();
             }
         }
-        return WPEFramework::Core::infinite;
+        return Thunder::Core::infinite;
     }
 }

@@ -18,7 +18,7 @@
 
 #include "OperatorVault.h"
 
-using namespace WPEFramework;
+using namespace Thunder;
 
 namespace CDMi {
 

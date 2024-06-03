@@ -85,7 +85,7 @@ private:
     TNvSession _descramblingSession;
     uint32_t _TSID;
     IMediaSessionSystem* _systemsession;
-    WPEFramework::Core::CriticalSection _lock;
+    Thunder::Core::CriticalSection _lock;
 };
 
 } // namespace CDMi
